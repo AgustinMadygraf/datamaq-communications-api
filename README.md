@@ -42,13 +42,11 @@ MVP local con FastAPI + Telegram webhook expuesto por ngrok, todo iniciado desde
 
 5. (Opcional) Notificar automaticamente luego de usar Codex CLI:
    - `python scripts/run_codex_and_notify.py -- codex`
-   - Este wrapper ejecuta Codex, mide el tiempo real y envia `curl` a `/tasks/start` solo si hubo cambios reales de contenido en archivos del working tree (hash antes/despues), con:
+   - Este wrapper ejecuta Codex y envia `curl` a `/tasks/start` por iteracion (sin esperar al fin de sesion) solo si hubo cambios reales de contenido en archivos del working tree (hash antes/despues), con:
      - `modified_files_count`
      - `repository_name`
      - `execution_time_seconds`
-   - Si Codex termina con codigo no-cero, envia notificacion de fallo (`force_fail=true`).
-   - Para forzar envio aunque no haya cambios:
-     - `python scripts/run_codex_and_notify.py --always-notify -- codex`
+   - No notifica por fin de sesion; notifica cuando detecta cambios y estabilidad de iteracion.
    - Si falla lectura de git status, se puede elegir comportamiento:
      - `python scripts/run_codex_and_notify.py --on-git-error notify -- codex` (default)
      - `python scripts/run_codex_and_notify.py --on-git-error skip -- codex`
@@ -97,7 +95,7 @@ Estructura de arquitectura limpia:
 ## Scripts Python
 
 - `python scripts/run_codex_and_notify.py -- codex`
-  - Ejecuta Codex CLI y al finalizar notifica automaticamente a `/tasks/start` si detecta cambios de archivos en el working tree.
+  - Ejecuta Codex CLI y notifica automaticamente a `/tasks/start` por iteracion estable si detecta cambios de archivos en el working tree.
   - `--dry-run-notify` simula la notificacion (no envio real).
   - `--on-git-error notify|skip` define que hacer si falla `git status`.
 
