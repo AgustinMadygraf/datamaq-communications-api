@@ -23,15 +23,10 @@ class StartTaskUseCase:
         self._fallback_chat_id = fallback_chat_id
 
     @staticmethod
-    def _normalize_modified_files(modified_files: tuple[str, ...] | None) -> tuple[str, ...]:
-        if not modified_files:
-            return ()
-        normalized: list[str] = []
-        for raw_path in modified_files:
-            path = raw_path.strip()
-            if path:
-                normalized.append(path)
-        return tuple(normalized)
+    def _normalize_modified_files_count(modified_files_count: int) -> int:
+        if modified_files_count < 0:
+            return 0
+        return modified_files_count
 
     @staticmethod
     def _normalize_repository_name(repository_name: str | None) -> str:
@@ -45,11 +40,8 @@ class StartTaskUseCase:
         task: StartedTask,
         elapsed_seconds: float,
     ) -> str:
-        modified_files = self._normalize_modified_files(task.modified_files)
-        if modified_files:
-            files_line = "Archivos modificados: " + ", ".join(modified_files)
-        else:
-            files_line = "Archivos modificados: (sin detalle)"
+        modified_files_count = self._normalize_modified_files_count(task.modified_files_count)
+        files_line = f"Cantidad de archivos modificados: {modified_files_count}"
 
         repository_name = self._normalize_repository_name(task.repository_name)
         if not repository_name:
@@ -65,14 +57,14 @@ class StartTaskUseCase:
         )
 
     def start(self, request: TaskExecutionRequest) -> StartedTask:
-        modified_files = self._normalize_modified_files(request.modified_files)
+        modified_files_count = self._normalize_modified_files_count(request.modified_files_count)
         repository_name = self._normalize_repository_name(request.repository_name)
         self._logger.info(
             "POST /tasks/start payload=%s",
             {
                 "duration_seconds": request.duration_seconds,
                 "force_fail": request.force_fail,
-                "modified_files": modified_files,
+                "modified_files_count": modified_files_count,
                 "repository_name": repository_name,
                 "execution_time_seconds": request.execution_time_seconds,
             },
@@ -94,18 +86,18 @@ class StartTaskUseCase:
             chat_id=chat_id,
             duration_seconds=request.duration_seconds,
             force_fail=request.force_fail,
-            modified_files=modified_files or None,
+            modified_files_count=modified_files_count,
             repository_name=repository_name or None,
             execution_time_seconds=request.execution_time_seconds,
         )
 
     async def run_task_and_notify(self, task: StartedTask) -> None:
         self._logger.info(
-            "Tarea iniciada. chat_id=%s duration_seconds=%s force_fail=%s modified_files=%s",
+            "Tarea iniciada. chat_id=%s duration_seconds=%s force_fail=%s modified_files_count=%s",
             task.chat_id,
             task.duration_seconds,
             task.force_fail,
-            task.modified_files,
+            task.modified_files_count,
         )
         started_at = time.perf_counter()
         try:

@@ -36,14 +36,14 @@ MVP local con FastAPI + Telegram webhook expuesto por ngrok, todo iniciado desde
 
 4. Dispara una tarea de ejemplo:
    - PowerShell:
-     - `Invoke-RestMethod -Method POST -Uri http://127.0.0.1:8000/tasks/start -ContentType 'application/json' -Body '{"duration_seconds":2,"force_fail":false,"modified_files":["README.md","scripts/run_codex_and_notify.py"]}'`
+     - `Invoke-RestMethod -Method POST -Uri http://127.0.0.1:8000/tasks/start -ContentType 'application/json' -Body '{"duration_seconds":2,"force_fail":false,"modified_files_count":2}'`
    - CMD:
-      - `curl -X POST http://127.0.0.1:8000/tasks/start -H "Content-Type: application/json" -d "{\"duration_seconds\":2,\"force_fail\":false,\"modified_files\":[\"README.md\",\"scripts/run_codex_and_notify.py\"]}"`
+      - `curl -X POST http://127.0.0.1:8000/tasks/start -H "Content-Type: application/json" -d "{\"duration_seconds\":2,\"force_fail\":false,\"modified_files_count\":2}"`
 
 5. (Opcional) Notificar automaticamente luego de usar Codex CLI:
    - `python scripts/run_codex_and_notify.py -- codex`
    - Este wrapper ejecuta Codex, mide el tiempo real y envia `curl` a `/tasks/start` solo si hubo cambios reales de contenido en archivos del working tree (hash antes/despues), con:
-     - `modified_files`
+     - `modified_files_count`
      - `repository_name`
      - `execution_time_seconds`
    - Si Codex termina con codigo no-cero, envia notificacion de fallo (`force_fail=true`).
@@ -70,7 +70,7 @@ MVP local con FastAPI + Telegram webhook expuesto por ngrok, todo iniciado desde
 - `POST /tasks/start`
   - Lanza tarea en background y notifica resultado al ultimo chat capturado.
   - Si no hay `last_chat_id`, usa `TELEGRAM_CHAT_ID` como fallback si esta configurado.
-  - Notificacion incluye: estado, repositorio, tiempo de ejecucion y propuesta de commit.
+  - Notificacion incluye: estado, repositorio, tiempo de ejecucion y cantidad de archivos modificados.
 
 ## Arquitectura
 
@@ -101,5 +101,5 @@ Estructura de arquitectura limpia:
   - `--dry-run-notify` simula la notificacion (no envio real).
   - `--on-git-error notify|skip` define que hacer si falla `git status`.
 
-- `python scripts/notify_task.py --modified-files README.md scripts/run_codex_and_notify.py --execution-time-seconds 42.5`
+- `python scripts/notify_task.py --modified-files-count 2 --execution-time-seconds 42.5`
   - Envia notificacion manual via `curl` a `/tasks/start`.

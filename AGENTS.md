@@ -14,7 +14,7 @@
   - Detecta cambios reales de contenido en archivos del working tree (hash antes/despues).
   - Hace `curl` a `POST /tasks/start` solo si hubo cambios de archivos.
   - Si Codex termina con codigo no-cero, notifica con estado de fallo (`force_fail=true`).
-  - Envia `modified_files`, `repository_name` y `execution_time_seconds`.
+  - Envia `modified_files_count`, `repository_name` y `execution_time_seconds`.
   - Si queres forzar notificacion aunque no haya cambios: `--always-notify`.
   - Si falla la lectura de git status: `--on-git-error notify|skip` (default: `notify`).
   - `--dry-run-notify` solo imprime el curl: no envia POST real ni notificacion a Telegram.
@@ -32,7 +32,7 @@
 
 ## Notificacion manual
 - Si Codex ya corrio, podes notificar manualmente:
-  - `python scripts/notify_task.py --modified-files README.md scripts/run_codex_and_notify.py --execution-time-seconds 42.5`
+  - `python scripts/notify_task.py --modified-files-count 2 --execution-time-seconds 42.5`
 
 ## Config relevante
 - `TASKS_START_URL` (default: `http://127.0.0.1:8000/tasks/start`)

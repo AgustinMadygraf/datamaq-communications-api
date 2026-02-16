@@ -109,7 +109,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "curl -X POST http://127.0.0.1:8000/tasks/start "
                     "-H \"Content-Type: application/json\" "
                     "-d \"{\\\"duration_seconds\\\":2,\\\"force_fail\\\":false,"
-                    "\\\"modified_files\\\":[\\\"README.md\\\",\\\"scripts/run_codex_and_notify.py\\\"],"
+                    "\\\"modified_files_count\\\":2,"
                     "\\\"repository_name\\\":\\\"telegram-task-notifier\\\","
                     "\\\"execution_time_seconds\\\":42.5}\""
                 ),
@@ -125,7 +125,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         request = TaskExecutionRequest(
             duration_seconds=payload.duration_seconds,
             force_fail=payload.force_fail,
-            modified_files=tuple(payload.modified_files or ()),
+            modified_files_count=payload.modified_files_count,
             repository_name=payload.repository_name,
             execution_time_seconds=payload.execution_time_seconds,
         )

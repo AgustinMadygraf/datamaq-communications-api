@@ -5,7 +5,7 @@ from dataclasses import dataclass
 class TaskExecutionRequest:
     duration_seconds: float
     force_fail: bool = False
-    modified_files: tuple[str, ...] | None = None
+    modified_files_count: int = 0
     repository_name: str | None = None
     execution_time_seconds: float | None = None
 
@@ -15,6 +15,6 @@ class StartedTask:
     chat_id: int
     duration_seconds: float
     force_fail: bool
-    modified_files: tuple[str, ...] | None = None
+    modified_files_count: int = 0
     repository_name: str | None = None
     execution_time_seconds: float | None = None

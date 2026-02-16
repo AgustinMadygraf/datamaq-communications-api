@@ -150,11 +150,11 @@ def main() -> int:
     force_fail = codex_exit_code != 0
 
     snapshot_after = get_working_tree_snapshot()
-    changed_files: list[str] = []
+    changed_files_count = 0
     has_file_changes = True
     if snapshot_before is not None and snapshot_after is not None:
-        changed_files = get_changed_files(snapshot_before, snapshot_after)
-        has_file_changes = bool(changed_files)
+        changed_files_count = len(get_changed_files(snapshot_before, snapshot_after))
+        has_file_changes = changed_files_count > 0
     elif snapshot_before is None or snapshot_after is None:
         if args.on_git_error == "skip":
             has_file_changes = False
@@ -170,7 +170,7 @@ def main() -> int:
     payload = build_payload(
         duration_seconds=args.duration_seconds,
         force_fail=force_fail,
-        modified_files=changed_files,
+        modified_files_count=changed_files_count,
         repository_name=repository_name,
         execution_time_seconds=elapsed_seconds,
     )

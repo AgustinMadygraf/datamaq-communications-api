@@ -43,14 +43,14 @@ def resolve_curl_binary() -> str:
 def build_payload(
     duration_seconds: float,
     force_fail: bool,
-    modified_files: list[str],
+    modified_files_count: int,
     repository_name: str,
     execution_time_seconds: float | None,
 ) -> dict[str, object]:
     payload: dict[str, object] = {
         "duration_seconds": duration_seconds,
         "force_fail": force_fail,
-        "modified_files": modified_files,
+        "modified_files_count": modified_files_count,
         "repository_name": repository_name,
     }
     if execution_time_seconds is not None:
@@ -102,7 +102,7 @@ def send_task_notification(
 def parse_args() -> argparse.Namespace:
     default_api_url = os.getenv("TASKS_START_URL", "").strip() or "http://127.0.0.1:8000/tasks/start"
     parser = argparse.ArgumentParser(
-        description="Dispara POST /tasks/start con archivos modificados + repo + tiempo.",
+        description="Dispara POST /tasks/start con cantidad de archivos modificados + repo + tiempo.",
     )
     parser.add_argument(
         "--api-url",
@@ -110,10 +110,10 @@ def parse_args() -> argparse.Namespace:
         help="URL de /tasks/start (default: TASKS_START_URL env o http://127.0.0.1:8000/tasks/start)",
     )
     parser.add_argument(
-        "--modified-files",
-        nargs="+",
+        "--modified-files-count",
+        type=int,
         required=True,
-        help="Lista de archivos modificados a reportar.",
+        help="Cantidad de archivos modificados a reportar.",
     )
     parser.add_argument(
         "--repository-name",
@@ -149,16 +149,16 @@ def main() -> int:
     settings = load_settings()
     args = parse_args()
 
-    modified_files = [path.strip() for path in args.modified_files if path.strip()]
-    if not modified_files:
-        print("ERROR: --modified-files no puede estar vacio.", file=sys.stderr)
+    modified_files_count = args.modified_files_count
+    if modified_files_count < 0:
+        print("ERROR: --modified-files-count no puede ser negativo.", file=sys.stderr)
         return 2
 
     repository_name = args.repository_name.strip() or detect_repository_name(settings.repository_name)
     payload = build_payload(
         duration_seconds=args.duration_seconds,
         force_fail=args.force_fail,
-        modified_files=modified_files,
+        modified_files_count=modified_files_count,
         repository_name=repository_name,
         execution_time_seconds=args.execution_time_seconds,
     )
