@@ -6,19 +6,33 @@
 
 ## Notificacion tras Codex CLI
 - Flujo recomendado (wrapper):
-  - `python scripts/run_codex_and_notify.py --commit-proposal "feat: mensaje de commit" -- codex`
+  - `python scripts/run_codex_and_notify.py -- codex`
 - Ese script:
   - Ejecuta Codex CLI.
   - Mide tiempo real de ejecucion.
   - Detecta nombre del repo.
-  - Detecta cambios de archivos en la iteracion con `git status --porcelain`.
+  - Detecta cambios reales de contenido en archivos del working tree (hash antes/despues).
   - Hace `curl` a `POST /tasks/start` solo si hubo cambios de archivos.
-  - Envia `commit_proposal`, `repository_name` y `execution_time_seconds`.
+  - Si Codex termina con codigo no-cero, notifica con estado de fallo (`force_fail=true`).
+  - Envia `modified_files`, `repository_name` y `execution_time_seconds`.
   - Si queres forzar notificacion aunque no haya cambios: `--always-notify`.
+  - Si falla la lectura de git status: `--on-git-error notify|skip` (default: `notify`).
+  - `--dry-run-notify` solo imprime el curl: no envia POST real ni notificacion a Telegram.
+  - Canal soportado por este flujo: Telegram (no WhatsApp).
+
+## Prueba real minima
+- Para validar envio real al terminar Codex CLI:
+  - `python scripts/run_codex_and_notify.py --always-notify -- python -c "print('codex simulado')"`
+
+## Checklist rapido (si no llega Telegram)
+- App levantada con `python run.py`.
+- `TELEGRAM_TOKEN` valido en `.env`.
+- Chat capturado: `GET /telegram/last_chat` con `last_chat_id` no nulo (o `TELEGRAM_CHAT_ID` fallback valido).
+- No usar `--dry-run-notify` en pruebas reales.
 
 ## Notificacion manual
 - Si Codex ya corrio, podes notificar manualmente:
-  - `python scripts/notify_task.py --commit-proposal "feat: mensaje de commit" --execution-time-seconds 42.5`
+  - `python scripts/notify_task.py --modified-files README.md scripts/run_codex_and_notify.py --execution-time-seconds 42.5`
 
 ## Config relevante
 - `TASKS_START_URL` (default: `http://127.0.0.1:8000/tasks/start`)

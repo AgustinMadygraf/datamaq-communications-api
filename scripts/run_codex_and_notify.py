@@ -1,4 +1,5 @@
 import argparse
+import hashlib
 import os
 import subprocess
 import sys
@@ -13,34 +14,61 @@ from notify_task import build_payload, detect_repository_name, send_task_notific
 from src.shared.config import load_settings
 
 
-def get_git_status_snapshot() -> list[str] | None:
+def _git_lines(args: list[str]) -> list[str] | None:
     try:
         result = subprocess.run(
-            ["git", "status", "--porcelain"],
+            ["git", *args],
             cwd=PROJECT_ROOT,
             check=False,
             capture_output=True,
             text=True,
         )
-    except Exception:
+    except (FileNotFoundError, OSError):
         return None
 
     if result.returncode != 0:
         return None
 
-    lines = [line.rstrip() for line in result.stdout.splitlines() if line.strip()]
-    lines.sort()
-    return lines
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def get_working_tree_snapshot() -> dict[str, str] | None:
+    tracked_files = _git_lines(["ls-files"])
+    if tracked_files is None:
+        return None
+
+    untracked_files = _git_lines(["ls-files", "--others", "--exclude-standard"])
+    if untracked_files is None:
+        return None
+
+    snapshot: dict[str, str] = {}
+    for path_str in sorted(set(tracked_files + untracked_files)):
+        full_path = PROJECT_ROOT / path_str
+        if not full_path.exists() or not full_path.is_file():
+            snapshot[path_str] = "<missing>"
+            continue
+
+        try:
+            digest = hashlib.sha256(full_path.read_bytes()).hexdigest()
+        except OSError:
+            return None
+        snapshot[path_str] = digest
+
+    return snapshot
+
+
+def get_changed_files(before: dict[str, str], after: dict[str, str]) -> list[str]:
+    changed: list[str] = []
+    all_paths = sorted(set(before.keys()) | set(after.keys()))
+    for path in all_paths:
+        if before.get(path) != after.get(path):
+            changed.append(path)
+    return changed
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Ejecuta Codex CLI y luego notifica /tasks/start automaticamente.",
-    )
-    parser.add_argument(
-        "--commit-proposal",
-        required=True,
-        help="Propuesta de nombre de commit a reportar.",
     )
     parser.add_argument(
         "--repository-name",
@@ -59,16 +87,10 @@ def parse_args() -> argparse.Namespace:
         help="Duracion simulada de tarea en backend (default: 0).",
     )
     parser.add_argument(
-        "--fail-on-nonzero",
-        action="store_true",
-        default=True,
-        help="Si Codex termina con codigo != 0, envia notificacion de fallo.",
-    )
-    parser.add_argument(
-        "--no-fail-on-nonzero",
-        dest="fail_on_nonzero",
-        action="store_false",
-        help="No marca fallo si Codex termina con codigo != 0.",
+        "--on-git-error",
+        choices=("notify", "skip"),
+        default="notify",
+        help="Si falla la lectura de git status: notify (default) o skip.",
     )
     parser.add_argument(
         "--dry-run-notify",
@@ -100,10 +122,6 @@ def normalize_codex_command(command_parts: list[str]) -> list[str]:
 def main() -> int:
     settings = load_settings()
     args = parse_args()
-    commit_proposal = args.commit_proposal.strip()
-    if not commit_proposal:
-        print("ERROR: --commit-proposal no puede estar vacio.", file=sys.stderr)
-        return 2
 
     codex_command = normalize_codex_command(args.codex_command)
     repository_name = args.repository_name.strip() or detect_repository_name(settings.repository_name)
@@ -111,7 +129,7 @@ def main() -> int:
 
     print("[codex-run] Ejecutando Codex CLI:")
     print(" ".join(codex_command))
-    snapshot_before = get_git_status_snapshot()
+    snapshot_before = get_working_tree_snapshot()
     started_at = time.perf_counter()
     codex_exit_code = 0
 
@@ -129,14 +147,21 @@ def main() -> int:
         codex_exit_code = 130
 
     elapsed_seconds = time.perf_counter() - started_at
-    force_fail = args.fail_on_nonzero and codex_exit_code != 0
+    force_fail = codex_exit_code != 0
 
-    snapshot_after = get_git_status_snapshot()
+    snapshot_after = get_working_tree_snapshot()
+    changed_files: list[str] = []
     has_file_changes = True
     if snapshot_before is not None and snapshot_after is not None:
-        has_file_changes = snapshot_before != snapshot_after
+        changed_files = get_changed_files(snapshot_before, snapshot_after)
+        has_file_changes = bool(changed_files)
     elif snapshot_before is None or snapshot_after is None:
-        print("[codex-run] Advertencia: no se pudo evaluar cambios por git. Se notificara por seguridad.")
+        if args.on_git_error == "skip":
+            has_file_changes = False
+            print("[codex-run] Advertencia: no se pudo evaluar cambios reales de archivos. Se omite notificacion.")
+        else:
+            has_file_changes = True
+            print("[codex-run] Advertencia: no se pudo evaluar cambios reales de archivos. Se notificara por seguridad.")
 
     if not args.always_notify and not has_file_changes:
         print("[codex-run] No hubo cambios de archivos en la iteracion. Se omite notificacion.")
@@ -145,7 +170,7 @@ def main() -> int:
     payload = build_payload(
         duration_seconds=args.duration_seconds,
         force_fail=force_fail,
-        commit_proposal=commit_proposal,
+        modified_files=changed_files,
         repository_name=repository_name,
         execution_time_seconds=elapsed_seconds,
     )
@@ -154,6 +179,8 @@ def main() -> int:
         "[codex-run] Notificando /tasks/start con "
         f"repo={repository_name} tiempo={elapsed_seconds:.2f}s force_fail={force_fail}"
     )
+    if args.dry_run_notify:
+        print("[codex-run] dry-run-notify activo: no se enviara notificacion real a Telegram.")
     notify_exit_code = send_task_notification(
         api_url=api_url,
         payload=payload,
@@ -163,6 +190,10 @@ def main() -> int:
         print(f"ERROR: fallo notificacion curl (exit={notify_exit_code})", file=sys.stderr)
         if codex_exit_code == 0:
             return notify_exit_code
+    elif args.dry_run_notify:
+        print("[codex-run] Simulacion completada. No hubo envio real.")
+    else:
+        print("[codex-run] Notificacion enviada correctamente.")
 
     return codex_exit_code
 

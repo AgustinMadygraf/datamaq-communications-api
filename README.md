@@ -36,18 +36,26 @@ MVP local con FastAPI + Telegram webhook expuesto por ngrok, todo iniciado desde
 
 4. Dispara una tarea de ejemplo:
    - PowerShell:
-     - `Invoke-RestMethod -Method POST -Uri http://127.0.0.1:8000/tasks/start -ContentType 'application/json' -Body '{"duration_seconds":2,"force_fail":false,"commit_proposal":"feat: notificar tiempo y resumen por telegram"}'`
+     - `Invoke-RestMethod -Method POST -Uri http://127.0.0.1:8000/tasks/start -ContentType 'application/json' -Body '{"duration_seconds":2,"force_fail":false,"modified_files":["README.md","scripts/run_codex_and_notify.py"]}'`
    - CMD:
-      - `curl -X POST http://127.0.0.1:8000/tasks/start -H "Content-Type: application/json" -d "{\"duration_seconds\":2,\"force_fail\":false,\"commit_proposal\":\"feat: notificar tiempo y resumen por telegram\"}"`
+      - `curl -X POST http://127.0.0.1:8000/tasks/start -H "Content-Type: application/json" -d "{\"duration_seconds\":2,\"force_fail\":false,\"modified_files\":[\"README.md\",\"scripts/run_codex_and_notify.py\"]}"`
 
 5. (Opcional) Notificar automaticamente luego de usar Codex CLI:
-   - `python scripts/run_codex_and_notify.py --commit-proposal "feat: resumen de cambios" -- codex`
-   - Este wrapper ejecuta Codex, mide el tiempo real y envia `curl` a `/tasks/start` solo si hubo cambios de archivos en la iteracion (detectado con `git status --porcelain`), con:
-     - `commit_proposal`
+   - `python scripts/run_codex_and_notify.py -- codex`
+   - Este wrapper ejecuta Codex, mide el tiempo real y envia `curl` a `/tasks/start` solo si hubo cambios reales de contenido en archivos del working tree (hash antes/despues), con:
+     - `modified_files`
      - `repository_name`
      - `execution_time_seconds`
+   - Si Codex termina con codigo no-cero, envia notificacion de fallo (`force_fail=true`).
    - Para forzar envio aunque no haya cambios:
-     - `python scripts/run_codex_and_notify.py --always-notify --commit-proposal "feat: resumen de cambios" -- codex`
+     - `python scripts/run_codex_and_notify.py --always-notify -- codex`
+   - Si falla lectura de git status, se puede elegir comportamiento:
+     - `python scripts/run_codex_and_notify.py --on-git-error notify -- codex` (default)
+     - `python scripts/run_codex_and_notify.py --on-git-error skip -- codex`
+   - `--dry-run-notify` solo imprime el curl y no envia notificacion real a Telegram.
+   - Prueba real minima:
+     - `python scripts/run_codex_and_notify.py --always-notify -- python -c "print('codex simulado')"`
+   - Canal soportado por este flujo: Telegram (no WhatsApp).
 
 ## Endpoints
 
@@ -88,8 +96,10 @@ Estructura de arquitectura limpia:
 
 ## Scripts Python
 
-- `python scripts/run_codex_and_notify.py --commit-proposal "feat: resumen de cambios" -- codex`
-  - Ejecuta Codex CLI y al finalizar notifica automaticamente a `/tasks/start` si detecta cambios de archivos.
+- `python scripts/run_codex_and_notify.py -- codex`
+  - Ejecuta Codex CLI y al finalizar notifica automaticamente a `/tasks/start` si detecta cambios de archivos en el working tree.
+  - `--dry-run-notify` simula la notificacion (no envio real).
+  - `--on-git-error notify|skip` define que hacer si falla `git status`.
 
-- `python scripts/notify_task.py --commit-proposal "feat: resumen de cambios" --execution-time-seconds 42.5`
+- `python scripts/notify_task.py --modified-files README.md scripts/run_codex_and_notify.py --execution-time-seconds 42.5`
   - Envia notificacion manual via `curl` a `/tasks/start`.

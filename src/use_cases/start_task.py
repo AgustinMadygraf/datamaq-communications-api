@@ -23,10 +23,15 @@ class StartTaskUseCase:
         self._fallback_chat_id = fallback_chat_id
 
     @staticmethod
-    def _normalize_commit_proposal(commit_proposal: str | None) -> str:
-        if commit_proposal is None:
-            return ""
-        return commit_proposal.strip()
+    def _normalize_modified_files(modified_files: tuple[str, ...] | None) -> tuple[str, ...]:
+        if not modified_files:
+            return ()
+        normalized: list[str] = []
+        for raw_path in modified_files:
+            path = raw_path.strip()
+            if path:
+                normalized.append(path)
+        return tuple(normalized)
 
     @staticmethod
     def _normalize_repository_name(repository_name: str | None) -> str:
@@ -40,9 +45,11 @@ class StartTaskUseCase:
         task: StartedTask,
         elapsed_seconds: float,
     ) -> str:
-        proposal = self._normalize_commit_proposal(task.commit_proposal)
-        if not proposal:
-            proposal = "Sin propuesta de commit."
+        modified_files = self._normalize_modified_files(task.modified_files)
+        if modified_files:
+            files_line = "Archivos modificados: " + ", ".join(modified_files)
+        else:
+            files_line = "Archivos modificados: (sin detalle)"
 
         repository_name = self._normalize_repository_name(task.repository_name)
         if not repository_name:
@@ -53,19 +60,19 @@ class StartTaskUseCase:
                 status_text,
                 f"Repositorio: {repository_name}",
                 f"Tiempo de ejecucion: {elapsed_seconds:.2f}s",
-                f"Propuesta de commit: {proposal}",
+                files_line,
             ]
         )
 
     def start(self, request: TaskExecutionRequest) -> StartedTask:
-        commit_proposal = self._normalize_commit_proposal(request.commit_proposal)
+        modified_files = self._normalize_modified_files(request.modified_files)
         repository_name = self._normalize_repository_name(request.repository_name)
         self._logger.info(
             "POST /tasks/start payload=%s",
             {
                 "duration_seconds": request.duration_seconds,
                 "force_fail": request.force_fail,
-                "commit_proposal": commit_proposal,
+                "modified_files": modified_files,
                 "repository_name": repository_name,
                 "execution_time_seconds": request.execution_time_seconds,
             },
@@ -87,18 +94,18 @@ class StartTaskUseCase:
             chat_id=chat_id,
             duration_seconds=request.duration_seconds,
             force_fail=request.force_fail,
-            commit_proposal=commit_proposal or None,
+            modified_files=modified_files or None,
             repository_name=repository_name or None,
             execution_time_seconds=request.execution_time_seconds,
         )
 
     async def run_task_and_notify(self, task: StartedTask) -> None:
         self._logger.info(
-            "Tarea iniciada. chat_id=%s duration_seconds=%s force_fail=%s commit_proposal=%s",
+            "Tarea iniciada. chat_id=%s duration_seconds=%s force_fail=%s modified_files=%s",
             task.chat_id,
             task.duration_seconds,
             task.force_fail,
-            task.commit_proposal,
+            task.modified_files,
         )
         started_at = time.perf_counter()
         try:

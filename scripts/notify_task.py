@@ -43,14 +43,14 @@ def resolve_curl_binary() -> str:
 def build_payload(
     duration_seconds: float,
     force_fail: bool,
-    commit_proposal: str,
+    modified_files: list[str],
     repository_name: str,
     execution_time_seconds: float | None,
 ) -> dict[str, object]:
     payload: dict[str, object] = {
         "duration_seconds": duration_seconds,
         "force_fail": force_fail,
-        "commit_proposal": commit_proposal,
+        "modified_files": modified_files,
         "repository_name": repository_name,
     }
     if execution_time_seconds is not None:
@@ -102,7 +102,7 @@ def send_task_notification(
 def parse_args() -> argparse.Namespace:
     default_api_url = os.getenv("TASKS_START_URL", "").strip() or "http://127.0.0.1:8000/tasks/start"
     parser = argparse.ArgumentParser(
-        description="Dispara POST /tasks/start con propuesta de commit + repo + tiempo.",
+        description="Dispara POST /tasks/start con archivos modificados + repo + tiempo.",
     )
     parser.add_argument(
         "--api-url",
@@ -110,9 +110,10 @@ def parse_args() -> argparse.Namespace:
         help="URL de /tasks/start (default: TASKS_START_URL env o http://127.0.0.1:8000/tasks/start)",
     )
     parser.add_argument(
-        "--commit-proposal",
+        "--modified-files",
+        nargs="+",
         required=True,
-        help="Propuesta de nombre de commit.",
+        help="Lista de archivos modificados a reportar.",
     )
     parser.add_argument(
         "--repository-name",
@@ -148,16 +149,16 @@ def main() -> int:
     settings = load_settings()
     args = parse_args()
 
-    commit_proposal = args.commit_proposal.strip()
-    if not commit_proposal:
-        print("ERROR: --commit-proposal no puede estar vacio.", file=sys.stderr)
+    modified_files = [path.strip() for path in args.modified_files if path.strip()]
+    if not modified_files:
+        print("ERROR: --modified-files no puede estar vacio.", file=sys.stderr)
         return 2
 
     repository_name = args.repository_name.strip() or detect_repository_name(settings.repository_name)
     payload = build_payload(
         duration_seconds=args.duration_seconds,
         force_fail=args.force_fail,
-        commit_proposal=commit_proposal,
+        modified_files=modified_files,
         repository_name=repository_name,
         execution_time_seconds=args.execution_time_seconds,
     )
