@@ -20,6 +20,7 @@
 ## Notificacion tras Codex CLI
 - Flujo recomendado (wrapper):
   - `python scripts/run_codex_and_notify.py -- codex`
+  - Importante: la notificacion se activa solo dentro de esa ejecucion envuelta. Si hay cambios hechos fuera de ese proceso (por ejemplo, ediciones manuales o herramientas externas), no se dispara Telegram automaticamente.
 - Ese script:
   - Ejecuta Codex CLI.
   - Mide tiempo real de ejecucion.
