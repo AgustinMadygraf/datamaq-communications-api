@@ -108,7 +108,10 @@ def get_changed_files(before: dict[str, str], after: dict[str, str]) -> list[str
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Ejecuta Codex CLI y luego notifica /tasks/start automaticamente.",
+        description=(
+            "Ejecuta Codex CLI y notifica /tasks/start por iteracion cuando "
+            "haya cambios de archivos y la actividad quede estable."
+        ),
     )
     parser.add_argument(
         "--repository-name",
@@ -140,7 +143,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--always-notify",
         action="store_true",
-        help="Notifica aunque no haya cambios de archivos en la iteracion.",
+        help="Reservado para compatibilidad. No aplica en modo por iteracion.",
+    )
+    parser.add_argument(
+        "--idle-seconds",
+        type=float,
+        default=float(os.getenv("TASK_NOTIFY_IDLE_SECONDS", "2.5")),
+        help="Segundos sin cambios para considerar cierre de iteracion (default: 2.5).",
+    )
+    parser.add_argument(
+        "--poll-interval-seconds",
+        type=float,
+        default=float(os.getenv("TASK_NOTIFY_POLL_INTERVAL_SECONDS", "0.75")),
+        help="Frecuencia de polling de cambios de archivos (default: 0.75).",
     )
     parser.add_argument(
         "--exclude-patterns",
@@ -183,101 +198,141 @@ def main() -> int:
     if args.duration_seconds < 0:
         print("ERROR: --duration-seconds no puede ser negativo.", file=sys.stderr)
         return 2
+    if args.idle_seconds <= 0:
+        print("ERROR: --idle-seconds debe ser mayor a 0.", file=sys.stderr)
+        return 2
+    if args.poll_interval_seconds <= 0:
+        print("ERROR: --poll-interval-seconds debe ser mayor a 0.", file=sys.stderr)
+        return 2
 
     print("[codex-run] Ejecutando Codex CLI:")
     print(" ".join(codex_command))
-    snapshot_before, excluded_before = get_working_tree_snapshot(exclude_patterns)
+    if args.always_notify:
+        print("[codex-run] Aviso: --always-notify no aplica en modo por iteracion y sera ignorado.")
+
+    baseline_snapshot, baseline_excluded = get_working_tree_snapshot(exclude_patterns)
+    if baseline_snapshot is None:
+        if args.on_git_error == "skip":
+            print("[codex-run] Advertencia: no se pudo iniciar deteccion git. Se omiten notificaciones.")
+        else:
+            print("[codex-run] Advertencia: no se pudo iniciar deteccion git. Se intentara continuar.", file=sys.stderr)
+
     started_at = time.perf_counter()
     codex_exit_code = 0
 
     try:
-        result = subprocess.run(
+        process = subprocess.Popen(
             codex_command,
             cwd=PROJECT_ROOT,
-            check=False,
         )
-        codex_exit_code = result.returncode
     except FileNotFoundError:
         print(f"ERROR: comando no encontrado: {codex_command[0]}", file=sys.stderr)
-        codex_exit_code = 127
-    except KeyboardInterrupt:
-        codex_exit_code = 130
-
-    elapsed_seconds = time.perf_counter() - started_at
-    force_fail = codex_exit_code != 0
-
-    snapshot_after, excluded_after = get_working_tree_snapshot(exclude_patterns)
-    changed_files_count = 0
-    has_file_changes = True
-    changed_files: list[str] = []
-    if snapshot_before is not None and snapshot_after is not None:
-        changed_files = get_changed_files(snapshot_before, snapshot_after)
-        changed_files_count = len(changed_files)
-        has_file_changes = changed_files_count > 0
-    elif snapshot_before is None or snapshot_after is None:
-        if args.on_git_error == "skip":
-            has_file_changes = False
-            print("[codex-run] Advertencia: no se pudo evaluar cambios reales de archivos. Se omite notificacion.")
-        else:
-            has_file_changes = True
-            print("[codex-run] Advertencia: no se pudo evaluar cambios reales de archivos. Se notificara por seguridad.")
+        return 127
 
     if args.debug_change_detection:
         print(
-            f"[codex-run][debug] patrones_excluidos={exclude_patterns} "
-            f"excluidos_before={excluded_before} excluidos_after={excluded_after}"
+            "[codex-run][debug] modo_notificacion=por_iteracion "
+            f"idle_seconds={args.idle_seconds} poll_interval={args.poll_interval_seconds}"
         )
-        if snapshot_before is not None and snapshot_after is not None:
-            print(
-                f"[codex-run][debug] archivos_evaluados_before={len(snapshot_before)} "
-                f"archivos_evaluados_after={len(snapshot_after)} cambios={changed_files_count}"
-            )
-            if changed_files_count:
-                preview = ", ".join(changed_files[:20])
-                suffix = " ..." if changed_files_count > 20 else ""
-                print(f"[codex-run][debug] archivos_con_cambio={preview}{suffix}")
-        else:
-            print(
-                "[codex-run][debug] snapshot_before_o_after=None "
-                f"on_git_error={args.on_git_error}"
-            )
+        print(
+            f"[codex-run][debug] patrones_excluidos={exclude_patterns} excluidos_baseline={baseline_excluded}"
+        )
+        if baseline_snapshot is not None:
+            print(f"[codex-run][debug] archivos_evaluados_baseline={len(baseline_snapshot)}")
 
-    if not args.always_notify and not has_file_changes:
-        print("[codex-run] No hubo cambios de archivos en la iteracion. Se omite notificacion.")
-        if args.debug_change_detection:
-            print(
-                "[codex-run][debug] razon_omision=no_file_changes "
-                f"always_notify={args.always_notify} codex_exit_code={codex_exit_code}"
-            )
-        return codex_exit_code
+    last_seen_snapshot = baseline_snapshot
+    last_change_ts = time.perf_counter()
+    notified_turns = 0
 
-    payload = build_payload(
-        duration_seconds=args.duration_seconds,
-        force_fail=force_fail,
-        modified_files_count=changed_files_count,
-        repository_name=repository_name,
-        execution_time_seconds=elapsed_seconds,
-    )
+    try:
+        while True:
+            process_code = process.poll()
+            if process_code is not None:
+                codex_exit_code = process_code
+                break
 
-    print(
-        "[codex-run] Notificando /tasks/start con "
-        f"repo={repository_name} tiempo={elapsed_seconds:.2f}s force_fail={force_fail}"
-    )
-    if args.dry_run_notify:
-        print("[codex-run] dry-run-notify activo: no se enviara notificacion real a Telegram.")
-    notify_exit_code = send_task_notification(
-        api_url=api_url,
-        payload=payload,
-        dry_run=args.dry_run_notify,
-    )
-    if notify_exit_code != 0:
-        print(f"ERROR: fallo notificacion curl (exit={notify_exit_code})", file=sys.stderr)
-        if codex_exit_code == 0:
-            return notify_exit_code
-    elif args.dry_run_notify:
-        print("[codex-run] Simulacion completada. No hubo envio real.")
-    else:
-        print("[codex-run] Notificacion enviada correctamente.")
+            current_snapshot, excluded_current = get_working_tree_snapshot(exclude_patterns)
+            now = time.perf_counter()
+
+            if baseline_snapshot is None or current_snapshot is None:
+                if args.on_git_error == "skip":
+                    if args.debug_change_detection:
+                        print("[codex-run][debug] git_error_con_skip=true (sin notificacion en esta muestra)")
+                    time.sleep(args.poll_interval_seconds)
+                    continue
+                print(
+                    "[codex-run] Advertencia: error leyendo git en modo por iteracion. "
+                    "No se pudo evaluar la muestra actual.",
+                    file=sys.stderr,
+                )
+                time.sleep(args.poll_interval_seconds)
+                continue
+
+            if last_seen_snapshot is None or current_snapshot != last_seen_snapshot:
+                last_change_ts = now
+                last_seen_snapshot = current_snapshot
+                if args.debug_change_detection:
+                    print(
+                        f"[codex-run][debug] cambio_detectado archivos_evaluados={len(current_snapshot)} "
+                        f"excluidos_actual={excluded_current}"
+                    )
+
+            changed_files = get_changed_files(baseline_snapshot, current_snapshot)
+            changed_files_count = len(changed_files)
+            idle_elapsed = now - last_change_ts
+            is_iteration_stable = changed_files_count > 0 and idle_elapsed >= args.idle_seconds
+
+            if args.debug_change_detection:
+                print(
+                    f"[codex-run][debug] cambios_vs_baseline={changed_files_count} "
+                    f"idle_elapsed={idle_elapsed:.2f}s estable={is_iteration_stable}"
+                )
+
+            if is_iteration_stable:
+                elapsed_seconds = now - started_at
+                payload = build_payload(
+                    duration_seconds=args.duration_seconds,
+                    force_fail=False,
+                    modified_files_count=changed_files_count,
+                    repository_name=repository_name,
+                    execution_time_seconds=elapsed_seconds,
+                )
+                print(
+                    "[codex-run] Iteracion estable detectada. "
+                    f"Notificando cambios={changed_files_count} repo={repository_name} tiempo={elapsed_seconds:.2f}s"
+                )
+                if args.debug_change_detection and changed_files_count:
+                    preview = ", ".join(changed_files[:20])
+                    suffix = " ..." if changed_files_count > 20 else ""
+                    print(f"[codex-run][debug] archivos_notificados={preview}{suffix}")
+
+                notify_exit_code = send_task_notification(
+                    api_url=api_url,
+                    payload=payload,
+                    dry_run=args.dry_run_notify,
+                )
+                if notify_exit_code != 0:
+                    print(f"ERROR: fallo notificacion curl (exit={notify_exit_code})", file=sys.stderr)
+                elif args.dry_run_notify:
+                    print("[codex-run] Simulacion completada. No hubo envio real.")
+                else:
+                    print("[codex-run] Notificacion enviada correctamente.")
+
+                baseline_snapshot = current_snapshot
+                last_seen_snapshot = current_snapshot
+                last_change_ts = now
+                notified_turns += 1
+
+            time.sleep(args.poll_interval_seconds)
+    except KeyboardInterrupt:
+        try:
+            process.terminate()
+        except OSError:
+            pass
+        codex_exit_code = 130
+
+    if args.debug_change_detection:
+        print(f"[codex-run][debug] proceso_codex_finalizado exit={codex_exit_code} turnos_notificados={notified_turns}")
 
     return codex_exit_code
 

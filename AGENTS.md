@@ -26,10 +26,12 @@
   - Detecta nombre del repo.
   - Detecta cambios reales de contenido en archivos del working tree (hash antes/despues).
   - Debe tolerar nombres de archivo complejos de git (separador NUL) y archivos no legibles sin abortar toda la deteccion.
-  - Hace `curl` a `POST /tasks/start` solo si hubo cambios de archivos.
-  - Si Codex termina con codigo no-cero, notifica con estado de fallo (`force_fail=true`).
+  - Hace `curl` a `POST /tasks/start` por iteracion (sin esperar fin de sesion), solo si hubo cambios de archivos y la actividad quedo estable.
+  - No notifica al finalizar toda la sesion/proceso de Codex.
   - Envia `modified_files_count`, `repository_name` y `execution_time_seconds`.
-  - Si queres forzar notificacion aunque no haya cambios: `--always-notify`.
+  - Criterio de estabilidad configurable:
+    - `--idle-seconds` (sin cambios para considerar cierre de iteracion).
+    - `--poll-interval-seconds` (frecuencia de deteccion).
   - Excluye patrones operativos (logs/artifacts temporales) aun cuando no esten en `.gitignore`.
     - Default interno: `*.log,*.tmp,*.temp,.last_chat_id,.last_chat_id.tmp`.
     - Personalizable por `TASK_NOTIFY_EXCLUDE_PATTERNS` o `--exclude-patterns`.
