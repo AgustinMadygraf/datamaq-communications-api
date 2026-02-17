@@ -101,3 +101,34 @@ Estructura de arquitectura limpia:
 
 - `python scripts/notify_task.py --modified-files-count 2 --execution-time-seconds 42.5`
   - Envia notificacion manual via `curl` a `/tasks/start`.
+
+## Deploy VPS (Docker + Nginx)
+
+Objetivo de produccion:
+
+- API: `https://api.datamaq.com.ar`
+- Webhook Telegram: `https://api.datamaq.com.ar/telegram/webhook`
+
+Archivos incluidos para despliegue:
+
+- `Dockerfile`
+- `docker-compose.yml`
+- `requirements.txt`
+- `.env.production.example`
+- `deploy/nginx/api.datamaq.com.ar.conf`
+
+Pasos rapidos en VPS:
+
+1. Copiar variables de produccion:
+   - `cp .env.production.example .env`
+   - Completar `TELEGRAM_TOKEN` y `TELEGRAM_WEBHOOK_SECRET`.
+2. Levantar contenedor:
+   - `docker compose up -d --build`
+3. Validar API local:
+   - `curl http://127.0.0.1:8000/telegram/last_chat`
+4. Instalar bloque Nginx y recargar:
+   - `nginx -t`
+   - `systemctl reload nginx`
+5. Emitir SSL:
+   - `certbot --nginx -d api.datamaq.com.ar`
+6. Configurar webhook en Telegram (`setWebhook`) con `secret_token`.
