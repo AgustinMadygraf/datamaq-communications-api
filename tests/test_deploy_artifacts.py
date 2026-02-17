@@ -75,7 +75,11 @@ def test_workflow_deploy_contains_healthcheck() -> None:
     assert deploy_step is not None, "Missing Deploy on VPS step"
 
     run_script = deploy_step.get("run", "")
+    assert "for i in {1..20}; do" in run_script
     assert "curl -fsS http://127.0.0.1:8000/telegram/last_chat >/dev/null" in run_script
+    assert 'echo "Healthcheck OK"' in run_script
+    assert 'echo "Healthcheck failed"' in run_script
+    assert "docker compose logs --tail=200 api" in run_script
 
 
 def test_workflow_deploy_uses_ssh_agent_with_secret() -> None:
