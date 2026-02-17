@@ -2,6 +2,7 @@ import argparse
 import fnmatch
 import hashlib
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -182,16 +183,30 @@ def parse_args() -> argparse.Namespace:
 def normalize_codex_command(command_parts: list[str]) -> list[str]:
     if command_parts and command_parts[0] == "--":
         command_parts = command_parts[1:]
-    if not command_parts:
-        return ["codex"]
     return command_parts
+
+
+def resolve_codex_command(command_parts: list[str]) -> list[str]:
+    if command_parts:
+        return command_parts
+    if shutil.which("codex") or shutil.which("codex.cmd") or shutil.which("codex.exe"):
+        return ["codex"]
+    if shutil.which("npx") or shutil.which("npx.cmd") or shutil.which("npx.exe"):
+        return ["npx", "@openai/codex"]
+    return []
+
+
+def resolve_windows_command(binary: str) -> str | None:
+    """Resolve command path across common Windows executable extensions."""
+    return shutil.which(binary) or shutil.which(f"{binary}.cmd") or shutil.which(f"{binary}.exe")
 
 
 def main() -> int:
     settings = load_settings()
     args = parse_args()
 
-    codex_command = normalize_codex_command(args.codex_command)
+    normalized_command = normalize_codex_command(args.codex_command)
+    codex_command = resolve_codex_command(normalized_command)
     repository_name = args.repository_name.strip() or detect_repository_name(settings.repository_name)
     api_url = args.api_url.strip() or "http://127.0.0.1:8000/tasks/start"
     exclude_patterns = parse_exclude_patterns(args.exclude_patterns)
@@ -206,6 +221,15 @@ def main() -> int:
         return 2
 
     print("[codex-run] Ejecutando Codex CLI:")
+    if not normalized_command and codex_command[:2] == ["npx", "@openai/codex"]:
+        print("[codex-run] Aviso: 'codex' no encontrado en PATH. Se usa fallback: npx @openai/codex")
+    if not codex_command:
+        print(
+            "ERROR: no se encontro 'codex' ni 'npx' en PATH. "
+            "Instala Codex CLI o Node.js (npx) o pasa el comando explicito con '-- <comando>'.",
+            file=sys.stderr,
+        )
+        return 127
     print(" ".join(codex_command))
     if args.always_notify:
         print("[codex-run] Aviso: --always-notify no aplica en modo por iteracion y sera ignorado.")
@@ -220,13 +244,44 @@ def main() -> int:
     started_at = time.perf_counter()
     codex_exit_code = 0
 
-    try:
-        process = subprocess.Popen(
-            codex_command,
-            cwd=PROJECT_ROOT,
+    process = None
+    codex_in_path = resolve_windows_command("codex")
+    npx_in_path = resolve_windows_command("npx")
+
+    primary_command = codex_command
+    command_head = codex_command[0].lower() if codex_command else ""
+    trailing_args = codex_command[1:] if len(codex_command) > 1 else []
+    if command_head == "codex" and codex_in_path:
+        primary_command = [codex_in_path, *trailing_args]
+    elif command_head == "npx" and npx_in_path:
+        primary_command = [npx_in_path, *trailing_args]
+
+    launch_attempts: list[list[str]] = [primary_command]
+    if command_head == "codex" and npx_in_path:
+        launch_attempts.append([npx_in_path, "@openai/codex", *trailing_args])
+
+    for candidate_cmd in launch_attempts:
+        if not candidate_cmd:
+            continue
+        try:
+            process = subprocess.Popen(
+                candidate_cmd,
+                cwd=PROJECT_ROOT,
+            )
+            if len(candidate_cmd) >= 2 and candidate_cmd[1] == "@openai/codex":
+                codex_command = candidate_cmd
+                print("[codex-run] Aviso: fallback de ejecucion aplicado: npx @openai/codex")
+            break
+        except FileNotFoundError:
+            continue
+
+    if process is None:
+        print(
+            "ERROR: no se pudo iniciar Codex CLI. "
+            f"codex_en_path={bool(codex_in_path)} npx_en_path={bool(npx_in_path)}. "
+            "Prueba con '-- npx @openai/codex' o instala Codex CLI.",
+            file=sys.stderr,
         )
-    except FileNotFoundError:
-        print(f"ERROR: comando no encontrado: {codex_command[0]}", file=sys.stderr)
         return 127
 
     if args.debug_change_detection:
