@@ -173,6 +173,23 @@ Pasos rapidos en VPS:
    - `certbot --nginx -d api.datamaq.com.ar`
 6. Configurar webhook en Telegram (`setWebhook`) con `secret_token`.
 
+## Checklist post-rename (GitHub repo)
+
+Luego de renombrar el repositorio en GitHub, validar:
+
+1. Secrets de GitHub Actions:
+  - `VPS_APP_DIR` apunta a la ruta real del proyecto en VPS.
+  - `SMTP_HOST`, `SMTP_FROM`, `SMTP_TO_DEFAULT` están definidos.
+2. Ruta/remote en VPS:
+  - `cd <VPS_APP_DIR>`
+  - `git remote -v` apunta al repo nuevo.
+3. Deploy:
+  - Ejecutar workflow `Deploy API to VPS`.
+4. Smoke tests:
+  - `curl -i https://api.datamaq.com.ar/telegram/last_chat` -> `200`.
+  - `curl -i -X OPTIONS https://api.datamaq.com.ar/contact -H "Origin: https://datamaq.com.ar" -H "Access-Control-Request-Method: POST"` -> `200`.
+  - `POST /contact` y `POST /mail` -> `202`.
+
 Documentacion operativa relacionada:
 
 - `docs/deploy-fastapi-telegram-vps.md`
