@@ -53,10 +53,53 @@ jobs:
 
       - name: Deploy on VPS
         run: |
+          SMTP_HOST="${{ secrets.SMTP_HOST }}" \
+          SMTP_FROM="${{ secrets.SMTP_FROM }}" \
+          SMTP_TO_DEFAULT="${{ secrets.SMTP_TO_DEFAULT }}" \
           ssh -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" << 'EOF'
           set -e
           cd "${{ secrets.VPS_APP_DIR }}"
           git pull --ff-only
+
+          if [ ! -f .env ]; then
+            cp .env.production.example .env
+          fi
+
+          upsert_env_var() {
+            key="$1"
+            value="$2"
+            if grep -q "^${key}=" .env; then
+              sed -i "s|^${key}=.*|${key}=${value}|" .env
+            else
+              printf "%s=%s\n" "$key" "$value" >> .env
+            fi
+          }
+
+          if [ -n "${SMTP_HOST}" ]; then
+            upsert_env_var "SMTP_HOST" "${SMTP_HOST}"
+          fi
+          if [ -n "${SMTP_FROM}" ]; then
+            upsert_env_var "SMTP_FROM" "${SMTP_FROM}"
+          fi
+          if [ -n "${SMTP_TO_DEFAULT}" ]; then
+            upsert_env_var "SMTP_TO_DEFAULT" "${SMTP_TO_DEFAULT}"
+          fi
+
+          missing=""
+          for key in SMTP_HOST SMTP_FROM SMTP_TO_DEFAULT; do
+            if ! grep -q "^${key}=" .env; then
+              missing="${missing} ${key}"
+            elif [ -z "$(grep "^${key}=" .env | head -n1 | cut -d'=' -f2-)" ]; then
+              missing="${missing} ${key}"
+            fi
+          done
+
+          if [ -n "${missing}" ]; then
+            echo "Missing required SMTP env vars in .env:${missing}"
+            echo "Define SMTP_HOST, SMTP_FROM and SMTP_TO_DEFAULT in GitHub Secrets."
+            exit 1
+          fi
+
           docker compose up -d --build
           docker compose ps
           for i in {1..20}; do
