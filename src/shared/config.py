@@ -24,6 +24,10 @@ def parse_int(value: str, default: int) -> int:
         return default
 
 
+def parse_csv(value: str) -> tuple[str, ...]:
+    return tuple(item.strip() for item in value.split(",") if item.strip())
+
+
 def parse_optional_int(value: str) -> int | None:
     text = value.strip()
     if not text:
@@ -73,6 +77,55 @@ class Settings:
     telegram_token: str
     telegram_webhook_secret: str
     telegram_api_base_url: str
+    smtp_host: str
+    smtp_port: int
+    smtp_user: str
+    smtp_pass: str
+    smtp_tls: bool
+    smtp_from: str
+    smtp_to_default: str
+    cors_allowed_origins: tuple[str, ...]
+    app_env: str
+    rate_limit_window: int
+    rate_limit_max: int
+    honeypot_field: str
+
+
+def validate_startup_settings(settings: Settings) -> None:
+    missing_fields: list[str] = []
+
+    if not settings.smtp_host:
+        missing_fields.append("SMTP_HOST")
+    if settings.smtp_port <= 0:
+        missing_fields.append("SMTP_PORT")
+    if not settings.smtp_from:
+        missing_fields.append("SMTP_FROM")
+    if not settings.smtp_to_default:
+        missing_fields.append("SMTP_TO_DEFAULT")
+    if settings.rate_limit_window <= 0:
+        missing_fields.append("RATE_LIMIT_WINDOW")
+    if settings.rate_limit_max <= 0:
+        missing_fields.append("RATE_LIMIT_MAX")
+    if not settings.honeypot_field:
+        missing_fields.append("HONEYPOT_FIELD")
+    if not settings.cors_allowed_origins:
+        missing_fields.append("CORS_ALLOWED_ORIGINS")
+
+    if missing_fields:
+        missing = ", ".join(missing_fields)
+        raise RuntimeError(f"Missing or invalid critical settings: {missing}")
+
+    valid_envs = {"development", "staging", "production", "test"}
+    if settings.app_env not in valid_envs:
+        raise RuntimeError(f"APP_ENV invalid: {settings.app_env}")
+
+    if settings.app_env == "production" and "*" in settings.cors_allowed_origins:
+        raise RuntimeError("CORS wildcard is not allowed in production")
+
+    has_smtp_user = bool(settings.smtp_user)
+    has_smtp_pass = bool(settings.smtp_pass)
+    if has_smtp_user != has_smtp_pass:
+        raise RuntimeError("SMTP_USER and SMTP_PASS must be both set or both empty")
 
 
 def load_settings() -> Settings:
@@ -99,4 +152,21 @@ def load_settings() -> Settings:
         telegram_token=os.getenv("TELEGRAM_TOKEN", "").strip(),
         telegram_webhook_secret=os.getenv("TELEGRAM_WEBHOOK_SECRET", "").strip(),
         telegram_api_base_url=os.getenv("TELEGRAM_API_BASE_URL", "https://api.telegram.org").strip(),
+        smtp_host=os.getenv("SMTP_HOST", "").strip(),
+        smtp_port=parse_int(os.getenv("SMTP_PORT", "587"), 587),
+        smtp_user=os.getenv("SMTP_USER", "").strip(),
+        smtp_pass=os.getenv("SMTP_PASS", "").strip(),
+        smtp_tls=parse_bool(os.getenv("SMTP_TLS", "true"), True),
+        smtp_from=os.getenv("SMTP_FROM", "").strip(),
+        smtp_to_default=os.getenv("SMTP_TO_DEFAULT", "").strip(),
+        cors_allowed_origins=parse_csv(
+            os.getenv(
+                "CORS_ALLOWED_ORIGINS",
+                "https://datamaq.com.ar,https://www.datamaq.com.ar,http://localhost:5173,http://127.0.0.1:5173",
+            )
+        ),
+        app_env=os.getenv("APP_ENV", "development").strip().lower() or "development",
+        rate_limit_window=parse_int(os.getenv("RATE_LIMIT_WINDOW", "60"), 60),
+        rate_limit_max=parse_int(os.getenv("RATE_LIMIT_MAX", "20"), 20),
+        honeypot_field=os.getenv("HONEYPOT_FIELD", "website").strip() or "website",
     )

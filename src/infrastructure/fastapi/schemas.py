@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -11,3 +12,31 @@ class TaskStartRequestModel(BaseModel):
     execution_time_seconds: float | None = Field(default=None, ge=0.0, le=86400.0)
     start_datetime: datetime | None = Field(default=None)
     end_datetime: datetime | None = Field(default=None)
+
+
+class ContactRequestModel(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    email: str = Field(
+        min_length=5,
+        max_length=254,
+        pattern=r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$",
+    )
+    message: str = Field(min_length=1, max_length=5000)
+    meta: dict[str, Any] = Field(default_factory=dict)
+    attribution: dict[str, Any] = Field(default_factory=dict)
+
+
+class AcceptedResponseModel(BaseModel):
+    request_id: str
+    status: str
+    message: str
+
+
+class ErrorBodyModel(BaseModel):
+    code: str
+    message: str
+
+
+class ErrorResponseModel(BaseModel):
+    request_id: str
+    error: ErrorBodyModel

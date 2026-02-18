@@ -1,7 +1,7 @@
 # Contrato API: `POST /contact` y `POST /mail`
 
 Fecha: 2026-02-18  
-Estado: Propuesto para implementación
+Estado: Implementado
 
 ## Objetivo
 
@@ -13,6 +13,19 @@ Definir el contrato final para migrar frontend Vue hacia endpoints de contacto/e
 - `POST /mail`
 
 Ambos endpoints aceptan el mismo request para compatibilidad con frontend actual.
+
+## Estado actual de implementación
+
+- `POST /contact` y `POST /mail` están activos en FastAPI.
+- Éxito responde `202 Accepted` con `{ request_id, status, message }`.
+- Anti-spam activo: `honeypot` + `rate-limit`.
+- Error uniforme para ambos endpoints:
+  - `{ request_id, error: { code, message } }`
+- CORS estricto activo vía `CORS_ALLOWED_ORIGINS`.
+- Los endpoints existentes de Telegram/tasks se mantienen:
+  - `POST /telegram/webhook`
+  - `GET /telegram/last_chat`
+  - `POST /tasks/start`
 
 ## Request (compat Vue)
 
@@ -176,6 +189,15 @@ Responsabilidad: orquestación de casos de uso sin dependencia de frameworks.
   - `SmtpMailGateway` (SMTP)
   - Implementación de rate-limit (in-memory/redis según entorno)
 
+Notas operativas:
+
+- El rate-limit actual es **in-memory** (válido para instancia única).
+- En despliegues multi-worker o multi-instancia, debe migrarse a backend compartido (ej. Redis) para consistencia global.
+- SMTP soporta dos modos:
+  - Con autenticación (`SMTP_USER` + `SMTP_PASS` ambos presentes)
+  - Sin autenticación (ambos vacíos)
+  - Configuración parcial (solo uno) falla en startup.
+
 Responsabilidad: integración con servicios externos.
 
 ### Interface
@@ -212,6 +234,64 @@ Responsabilidad: traducción HTTP <-> application.
   - `RATE_LIMIT_MAX`
   - `HONEYPOT_FIELD`
 
+## Checks de startup (implementados)
+
+La aplicación falla al iniciar si faltan o son inválidas variables críticas:
+
+- `SMTP_HOST`
+- `SMTP_PORT` (> 0)
+- `SMTP_FROM`
+- `SMTP_TO_DEFAULT`
+- `CORS_ALLOWED_ORIGINS`
+- `RATE_LIMIT_WINDOW` (> 0)
+- `RATE_LIMIT_MAX` (> 0)
+- `HONEYPOT_FIELD`
+- `APP_ENV` (`development`, `staging`, `production`, `test`)
+
+Además, en `production` se bloquea `*` en CORS.
+
+Política actual de CORS methods para la API de contacto/email:
+
+- `POST`, `OPTIONS`
+
+## Validación rápida (curl)
+
+### `POST /contact` (202)
+
+```bash
+curl -X POST http://127.0.0.1:8000/contact \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name":"Juan Pérez",
+    "email":"juan@empresa.com",
+    "message":"Necesito una demo",
+    "meta":{"source":"landing"},
+    "attribution":{"website":""}
+  }'
+```
+
+### `POST /mail` (202)
+
+```bash
+curl -X POST http://127.0.0.1:8000/mail \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name":"María Gómez",
+    "email":"maria@cliente.com",
+    "message":"Quiero recibir información",
+    "meta":{"source":"footer-form"},
+    "attribution":{"website":""}
+  }'
+```
+
+### Preflight CORS (`OPTIONS`)
+
+```bash
+curl -i -X OPTIONS http://127.0.0.1:8000/contact \
+  -H "Origin: https://datamaq.com.ar" \
+  -H "Access-Control-Request-Method: POST"
+```
+
 ## Plan de implementación en 4 etapas (sin código)
 
 ### Etapa 1 — Contrato y decisiones
@@ -237,3 +317,4 @@ Responsabilidad: traducción HTTP <-> application.
 - Agregar tests de contrato e integración.
 - Instrumentar logs/correlación por `request_id`.
 - Desplegar gradual y validar migración del frontend Vue.
+- Evolución recomendada: mover rate-limit a Redis antes de escalar a múltiples workers/instancias.
