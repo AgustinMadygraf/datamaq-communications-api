@@ -26,7 +26,7 @@ jobs:
 
       - name: Run tests
         run: |
-          if [ -d tests ]; then pytest -q; else echo "No tests directory"; fi
+          if [ -d tests ]; then PYTHONPATH="${{ github.workspace }}:${PYTHONPATH}" pytest -q; else echo "No tests directory"; fi
 
       - name: Build Docker image
         run: docker build -t telegram-notifier-api:ci .
