@@ -119,6 +119,7 @@ Accion esperada:
 2. extract remoto ok
 3. `.env` con `SMTP_HOST`, `SMTP_FROM`, `SMTP_TO_DEFAULT`
 4. `docker compose up -d --build` ok
+5. `APP_ENV=production` presente en `.env` remoto
 
 ### `verify_local`
 
@@ -151,4 +152,14 @@ docker compose ps
 docker compose logs --tail=200 api
 curl -i http://127.0.0.1:8000/health
 curl -i -X OPTIONS http://127.0.0.1:8000/contact -H "Origin: https://datamaq.com.ar" -H "Access-Control-Request-Method: POST"
+```
+
+Validar entorno efectivo del contenedor:
+
+```bash
+docker exec datamaq-communications-api printenv APP_ENV
+docker exec datamaq-communications-api printenv HTTP_LOG_HEALTHCHECKS
+docker exec datamaq-communications-api printenv DEBUG_CONTACT_OBSERVABILITY
+docker exec datamaq-communications-api printenv DEBUG_TELEGRAM_WEBHOOK
+docker exec datamaq-communications-api printenv MASK_SENSITIVE_IDS
 ```

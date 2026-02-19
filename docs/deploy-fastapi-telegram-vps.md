@@ -39,6 +39,11 @@ Crear `.env` en el directorio del proyecto:
 - `AUTO_SET_WEBHOOK=false`
 - `SERVER_HOST=0.0.0.0`
 - `SERVER_PORT=8000`
+- `APP_ENV=production`
+- `HTTP_LOG_HEALTHCHECKS=false`
+- `DEBUG_CONTACT_OBSERVABILITY=false`
+- `DEBUG_TELEGRAM_WEBHOOK=false`
+- `MASK_SENSITIVE_IDS=true`
 
 No versionar secretos. Gestionarlos en Bitwarden.
 
@@ -118,6 +123,37 @@ Logs:
 ```bash
 docker compose logs -f api
 journalctl -u nginx -f
+```
+
+## 9) Observabilidad y depuracion controlada
+
+Defaults recomendados en produccion:
+
+1. `APP_ENV=production`
+2. `HTTP_LOG_HEALTHCHECKS=false`
+3. `DEBUG_CONTACT_OBSERVABILITY=false`
+4. `DEBUG_TELEGRAM_WEBHOOK=false`
+5. `MASK_SENSITIVE_IDS=true`
+
+Para incidentes (ventana acotada):
+
+1. activar temporalmente `DEBUG_CONTACT_OBSERVABILITY=true` y/o `DEBUG_TELEGRAM_WEBHOOK=true`,
+2. recrear servicio: `docker compose up -d --build`,
+3. revisar eventos:
+   - `contact_payload_signals`
+   - `telegram_webhook_received`
+   - `telegram_webhook_rejected`
+   - `telegram_webhook_chat_captured`
+   - `smtp_send_start`
+   - `smtp_send_success`
+   - `smtp_send_failure`
+4. volver flags a `false` al cerrar incidente.
+
+Consulta rapida de eventos en logs Docker:
+
+```bash
+docker logs datamaq-communications-api --since 15m \
+  | grep -E '"event":"(contact_payload_signals|telegram_webhook_|smtp_send_)|http_request'
 ```
 
 Rollback:
