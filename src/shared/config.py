@@ -59,7 +59,7 @@ def load_env_file(env_path: Path) -> list[str]:
 
 
 @dataclass(frozen=True)
-class Settings:
+class Settings:  # pylint: disable=too-many-instance-attributes
     project_root: Path
     env_path: Path
     state_file_path: Path
@@ -94,7 +94,7 @@ class Settings:
     honeypot_field: str
 
 
-def validate_startup_settings(settings: Settings) -> None:
+def validate_startup_settings(settings: Settings) -> None:  # pylint: disable=too-many-branches
     missing_fields: list[str] = []
 
     if not settings.smtp_host:

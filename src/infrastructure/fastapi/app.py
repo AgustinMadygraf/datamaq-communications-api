@@ -97,6 +97,7 @@ def _log_environment_configuration(app_settings: Settings) -> None:
     )
 
 
+# pylint: disable=too-many-locals,too-many-statements
 def create_app(custom_settings: Settings | None = None) -> FastAPI:
     effective_settings = custom_settings or load_settings()
     configure_logging(effective_settings.log_level)

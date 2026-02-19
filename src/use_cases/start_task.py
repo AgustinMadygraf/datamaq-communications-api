@@ -1,9 +1,9 @@
 import asyncio
-from datetime import datetime, timezone
 import logging
 import time
 
 from src.entities.task import StartedTask, TaskExecutionRequest
+from src.shared.datetime_utils import to_utc_iso
 from src.use_cases.errors import LastChatNotAvailableError
 from src.use_cases.ports import ChatStateGateway, TelegramNotificationGateway
 
@@ -37,14 +37,6 @@ class StartTaskUseCase:
             return ""
         return repository_name.strip()
 
-    @staticmethod
-    def _format_datetime_utc(value: datetime | None) -> str | None:
-        if value is None:
-            return None
-        if value.tzinfo is None:
-            value = value.replace(tzinfo=timezone.utc)
-        return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-
     def _build_notification_message(
         self,
         status_text: str,
@@ -67,12 +59,12 @@ class StartTaskUseCase:
                         f"Repositorio: {repository_name}",
                         f"Tiempo de ejecucion: {elapsed_seconds:.2f}s",
                         (
-                            f"Inicio: {self._format_datetime_utc(task.start_datetime)}"
+                            f"Inicio: {to_utc_iso(task.start_datetime)}"
                             if task.start_datetime is not None
                             else None
                         ),
                         (
-                            f"Fin: {self._format_datetime_utc(task.end_datetime)}"
+                            f"Fin: {to_utc_iso(task.end_datetime)}"
                             if task.end_datetime is not None
                             else None
                         ),
@@ -99,8 +91,8 @@ class StartTaskUseCase:
                 "modified_files_count": modified_files_count,
                 "repository_name": repository_name,
                 "execution_time_seconds": request.execution_time_seconds,
-                "start_datetime": self._format_datetime_utc(request.start_datetime),
-                "end_datetime": self._format_datetime_utc(request.end_datetime),
+                "start_datetime": to_utc_iso(request.start_datetime),
+                "end_datetime": to_utc_iso(request.end_datetime),
             },
         )
         chat_id = self._chat_state_gateway.get_last_chat_id()

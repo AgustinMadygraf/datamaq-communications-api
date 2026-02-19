@@ -8,7 +8,7 @@ from src.entities.contact import ContactMessage
 from src.use_cases.ports import MailGateway
 
 
-class SmtpMailGateway(MailGateway):
+class SmtpMailGateway(MailGateway):  # pylint: disable=too-many-instance-attributes
     def __init__(
         self,
         host: str,

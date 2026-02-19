@@ -14,7 +14,7 @@ class TaskExecutionRequest:
 
 
 @dataclass(frozen=True)
-class StartedTask:
+class StartedTask:  # pylint: disable=too-many-instance-attributes
     chat_id: int
     duration_seconds: float
     force_fail: bool
