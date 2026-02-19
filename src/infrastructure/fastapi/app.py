@@ -1,16 +1,19 @@
 import os
+import hashlib
+import time
 from uuid import uuid4
 from typing import Any
 
-from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from src.entities.task import TaskExecutionRequest
 from src.infrastructure.fastapi.contact_router import create_contact_router
 from src.infrastructure.fastapi.health_router import create_health_router
-from src.infrastructure.fastapi.schemas import TaskStartRequestModel
+from src.infrastructure.fastapi.request_metadata import get_client_ip, get_x_forwarded_for
+from src.infrastructure.fastapi.tasks_router import create_tasks_router
+from src.infrastructure.fastapi.telegram_router import create_telegram_router
 from src.infrastructure.rate_limit.in_memory_rate_limiter_gateway import InMemoryRateLimiterGateway
 from src.infrastructure.request_id.context_request_id_provider import (
     ContextRequestIdProvider,
@@ -28,7 +31,6 @@ from src.interface_adapters.gateways.telegram_notification_gateway import (
 )
 from src.shared.config import Settings, load_settings, validate_startup_settings
 from src.shared.logger import configure_logging, get_logger
-from src.use_cases.errors import InvalidTelegramSecretError, LastChatNotAvailableError
 from src.use_cases.get_health import GetHealthUseCase
 from src.use_cases.get_last_chat import GetLastChatUseCase
 from src.use_cases.process_telegram_webhook import ProcessTelegramWebhookUseCase
@@ -36,11 +38,12 @@ from src.use_cases.send_mail import SendMailUseCase
 from src.use_cases.start_task import StartTaskUseCase
 from src.use_cases.submit_contact import SubmitContactUseCase
 
+_SERVICE_NAME = "datamaq-communications-api"
+
 configure_logging()
-logger = get_logger("datamaq-communications-api")
+logger = get_logger(_SERVICE_NAME)
 
 _CONTACT_PATHS = {"/contact", "/mail"}
-_SERVICE_NAME = "datamaq-communications-api"
 
 
 def _request_id_from_state(request: Request) -> str:
@@ -63,6 +66,13 @@ def _error_response(request: Request, status_code: int, code: str, message: str)
     }
     return JSONResponse(status_code=status_code, content=payload, headers={"X-Request-Id": request_id})
 
+
+def _payload_fingerprint(raw_body: bytes) -> tuple[int, str]:
+    if not raw_body:
+        return 0, ""
+    return len(raw_body), hashlib.sha256(raw_body).hexdigest()
+
+
 def _log_environment_configuration(app_settings: Settings) -> None:
     if not app_settings.env_path.exists():
         logger.info("No se encontro .env en %s", app_settings.env_path)
@@ -78,9 +88,18 @@ def _log_environment_configuration(app_settings: Settings) -> None:
     elif app_settings.telegram_chat_id is not None:
         logger.info("TELEGRAM_CHAT_ID fallback activo: %s", app_settings.telegram_chat_id)
 
+    logger.info(
+        "Runtime config app_env=%s log_level=%s proxy_headers_enabled=%s forwarded_allow_ips=%s",
+        app_settings.app_env,
+        app_settings.log_level,
+        app_settings.proxy_headers_enabled,
+        app_settings.forwarded_allow_ips,
+    )
+
 
 def create_app(custom_settings: Settings | None = None) -> FastAPI:
     effective_settings = custom_settings or load_settings()
+    configure_logging(effective_settings.log_level)
     validate_startup_settings(effective_settings)
     _log_environment_configuration(effective_settings)
 
@@ -147,6 +166,8 @@ def create_app(custom_settings: Settings | None = None) -> FastAPI:
     fastapi_app.state.send_mail_use_case = send_mail_use_case
     fastapi_app.state.submit_contact_use_case = submit_contact_use_case
     fastapi_app.include_router(create_health_router(health_controller))
+    fastapi_app.include_router(create_telegram_router(telegram_controller))
+    fastapi_app.include_router(create_tasks_router(tasks_controller, start_task_use_case))
     fastapi_app.include_router(
         create_contact_router(
             submit_contact_use_case=submit_contact_use_case,
@@ -169,30 +190,63 @@ def create_app(custom_settings: Settings | None = None) -> FastAPI:
         response.headers["X-Request-Id"] = request_id
         return response
 
-    @fastapi_app.post("/telegram/webhook")
-    async def telegram_webhook(
-        update: dict[str, Any],
-        x_telegram_bot_api_secret_token: str | None = Header(default=None),
-    ) -> dict[str, Any]:
-        try:
-            return telegram_controller.handle_webhook(update, x_telegram_bot_api_secret_token)
-        except InvalidTelegramSecretError as exc:
-            raise HTTPException(status_code=403, detail=str(exc)) from exc
+    @fastapi_app.middleware("http")
+    async def request_logging_middleware(request: Request, call_next: Any) -> JSONResponse:
+        started_at = time.perf_counter()
+        client_ip = get_client_ip(request)
+        forwarded_for = get_x_forwarded_for(request)
 
-    @fastapi_app.get("/telegram/last_chat")
-    async def telegram_last_chat() -> dict[str, Any]:
-        return telegram_controller.handle_last_chat()
+        try:
+            response = await call_next(request)
+        except Exception:
+            duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
+            logger.exception(
+                "request_error",
+                extra={
+                    "event": "http_request",
+                    "request_id": _request_id_from_state(request),
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status_code": 500,
+                    "duration_ms": duration_ms,
+                    "client_ip_real": client_ip,
+                    "x_forwarded_for": forwarded_for,
+                },
+            )
+            raise
+
+        duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
+        logger.info(
+            "request_completed",
+            extra={
+                "event": "http_request",
+                "request_id": _request_id_from_state(request),
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": response.status_code,
+                "duration_ms": duration_ms,
+                "client_ip_real": client_ip,
+                "x_forwarded_for": forwarded_for,
+            },
+        )
+        return response
+
 
     @fastapi_app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
         raw_body = await request.body()
-        raw_text = raw_body.decode("utf-8", errors="replace")
+        body_size, body_sha256 = _payload_fingerprint(raw_body)
         logger.error(
-            "Validation error. method=%s path=%s body=%s errors=%s",
-            request.method,
-            request.url.path,
-            raw_text,
-            exc.errors(),
+            "validation_error",
+            extra={
+                "event": "validation_error",
+                "request_id": _request_id_from_state(request),
+                "method": request.method,
+                "path": request.url.path,
+                "body_size_bytes": body_size,
+                "body_sha256": body_sha256,
+                "errors": exc.errors(),
+            },
         )
 
         if request.url.path in _CONTACT_PATHS:
@@ -224,6 +278,17 @@ def create_app(custom_settings: Settings | None = None) -> FastAPI:
 
     @fastapi_app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+        logger.warning(
+            "http_exception",
+            extra={
+                "event": "http_exception",
+                "request_id": _request_id_from_state(request),
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": exc.status_code,
+            },
+        )
+
         if request.url.path in _CONTACT_PATHS:
             code = "BAD_REQUEST"
             message = "Bad request"
@@ -235,32 +300,6 @@ def create_app(custom_settings: Settings | None = None) -> FastAPI:
             return _error_response(request=request, status_code=exc.status_code, code=code, message=message)
 
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers)
-
-    @fastapi_app.post("/tasks/start")
-    async def tasks_start(
-        payload: TaskStartRequestModel,
-        background_tasks: BackgroundTasks,
-    ) -> dict[str, Any]:
-        request = TaskExecutionRequest(
-            duration_seconds=payload.duration_seconds,
-            force_fail=payload.force_fail,
-            modified_files_count=payload.modified_files_count,
-            repository_name=payload.repository_name,
-            execution_time_seconds=payload.execution_time_seconds,
-            start_datetime=payload.start_datetime,
-            end_datetime=payload.end_datetime,
-        )
-
-        try:
-            return tasks_controller.handle_start_task(
-                request=request,
-                schedule_background_task=lambda task: background_tasks.add_task(
-                    start_task_use_case.run_task_and_notify,
-                    task,
-                ),
-            )
-        except LastChatNotAvailableError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return fastapi_app
 

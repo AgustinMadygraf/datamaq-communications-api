@@ -16,6 +16,9 @@ Incluye endpoints de contacto/email (`POST /contact`, `POST /mail`) con respuest
 
 1. Configura variables de entorno (podes copiar `.env.example` a `.env`):
   - `APP_ENV` (obligatorio; `development|staging|production|test`)
+  - `LOG_LEVEL` (opcional; default `INFO`)
+  - `PROXY_HEADERS_ENABLED` (opcional; default `true`)
+  - `FORWARDED_ALLOW_IPS` (opcional; default `*`)
   - `CORS_ALLOWED_ORIGINS` (obligatorio; lista separada por comas)
   - `SMTP_HOST` (obligatorio)
   - `SMTP_PORT` (obligatorio; entero > 0)

@@ -3,6 +3,11 @@ services:
     build: .
     container_name: datamaq-communications-api
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     env_file:
       - .env
     ports:

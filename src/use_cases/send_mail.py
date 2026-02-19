@@ -14,5 +14,11 @@ class SendMailUseCase:
         try:
             self._mail_gateway.send_contact_email(contact_message=contact_message, request_id=request_id)
         except Exception as exc:
-            self._logger.exception("Failed to deliver email for request_id=%s", request_id)
+            self._logger.exception(
+                "mail_delivery_failed",
+                extra={
+                    "event": "mail_delivery_failed",
+                    "request_id": request_id,
+                },
+            )
             raise MailDeliveryError("mail delivery failed") from exc

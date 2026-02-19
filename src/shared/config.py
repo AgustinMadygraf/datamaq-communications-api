@@ -86,6 +86,9 @@ class Settings:
     smtp_to_default: str
     cors_allowed_origins: tuple[str, ...]
     app_env: str
+    log_level: str
+    proxy_headers_enabled: bool
+    forwarded_allow_ips: str
     rate_limit_window: int
     rate_limit_max: int
     honeypot_field: str
@@ -121,6 +124,9 @@ def validate_startup_settings(settings: Settings) -> None:
 
     if settings.app_env == "production" and "*" in settings.cors_allowed_origins:
         raise RuntimeError("CORS wildcard is not allowed in production")
+
+    if settings.proxy_headers_enabled and not settings.forwarded_allow_ips.strip():
+        raise RuntimeError("FORWARDED_ALLOW_IPS is required when PROXY_HEADERS_ENABLED=true")
 
     has_smtp_user = bool(settings.smtp_user)
     has_smtp_pass = bool(settings.smtp_pass)
@@ -166,6 +172,9 @@ def load_settings() -> Settings:
             )
         ),
         app_env=os.getenv("APP_ENV", "development").strip().lower() or "development",
+        log_level=os.getenv("LOG_LEVEL", "INFO").strip().upper() or "INFO",
+        proxy_headers_enabled=parse_bool(os.getenv("PROXY_HEADERS_ENABLED", "true"), True),
+        forwarded_allow_ips=os.getenv("FORWARDED_ALLOW_IPS", "*").strip() or "*",
         rate_limit_window=parse_int(os.getenv("RATE_LIMIT_WINDOW", "60"), 60),
         rate_limit_max=parse_int(os.getenv("RATE_LIMIT_MAX", "20"), 20),
         honeypot_field=os.getenv("HONEYPOT_FIELD", "website").strip() or "website",

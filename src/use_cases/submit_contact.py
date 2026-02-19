@@ -40,7 +40,14 @@ class SubmitContactUseCase:
         honeypot_raw = contact_message.attribution.get(self._honeypot_field, "")
         honeypot_value = str(honeypot_raw).strip() if honeypot_raw is not None else ""
         if honeypot_value:
-            self._logger.warning("Honeypot triggered. endpoint=%s client=%s", endpoint_key, client_identifier)
+            self._logger.warning(
+                "honeypot_triggered",
+                extra={
+                    "event": "honeypot_triggered",
+                    "endpoint": endpoint_key,
+                    "client_identifier": client_identifier,
+                },
+            )
             raise HoneypotTriggeredError("honeypot triggered")
 
         limited_key = f"{endpoint_key}:{client_identifier}"
@@ -50,11 +57,26 @@ class SubmitContactUseCase:
             max_requests=self._rate_limit_max,
         )
         if not is_allowed:
-            self._logger.warning("Rate limit exceeded. endpoint=%s client=%s", endpoint_key, client_identifier)
+            self._logger.warning(
+                "rate_limit_exceeded",
+                extra={
+                    "event": "rate_limit_exceeded",
+                    "endpoint": endpoint_key,
+                    "client_identifier": client_identifier,
+                },
+            )
             raise RateLimitExceededError("rate limit exceeded")
 
         request_id = self._request_id_provider.new_id()
-        self._logger.info("Contact accepted endpoint=%s request_id=%s", endpoint_key, request_id)
+        self._logger.info(
+            "contact_accepted",
+            extra={
+                "event": "contact_accepted",
+                "endpoint": endpoint_key,
+                "request_id": request_id,
+                "client_identifier": client_identifier,
+            },
+        )
         return SubmitContactResult(
             request_id=request_id,
             status="accepted",

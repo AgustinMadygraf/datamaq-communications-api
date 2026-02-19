@@ -40,6 +40,9 @@ def _valid_settings() -> Settings:
         smtp_to_default="ops@example.com",
         cors_allowed_origins=("https://datamaq.com.ar",),
         app_env="development",
+        log_level="INFO",
+        proxy_headers_enabled=True,
+        forwarded_allow_ips="*",
         rate_limit_window=60,
         rate_limit_max=20,
         honeypot_field="website",
@@ -103,4 +106,12 @@ def test_validate_startup_settings_rejects_wildcard_cors_in_production() -> None
     broken = Settings(**{**settings.__dict__, "app_env": "production", "cors_allowed_origins": ("*",)})
 
     with pytest.raises(RuntimeError, match="CORS wildcard is not allowed in production"):
+        validate_startup_settings(broken)
+
+
+def test_validate_startup_settings_requires_forwarded_allow_ips_when_proxy_headers_enabled() -> None:
+    settings = _valid_settings()
+    broken = Settings(**{**settings.__dict__, "proxy_headers_enabled": True, "forwarded_allow_ips": ""})
+
+    with pytest.raises(RuntimeError, match="FORWARDED_ALLOW_IPS"):
         validate_startup_settings(broken)

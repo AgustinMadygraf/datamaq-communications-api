@@ -76,7 +76,9 @@ def main() -> int:
         app=app,
         host=settings.server_host,
         port=settings.server_port,
-        log_level="info",
+        log_level=settings.log_level.lower(),
+        proxy_headers=settings.proxy_headers_enabled,
+        forwarded_allow_ips=settings.forwarded_allow_ips,
     )
     server = uvicorn.Server(config)
 

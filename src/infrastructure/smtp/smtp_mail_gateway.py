@@ -2,6 +2,7 @@ from email.message import EmailMessage
 import json
 import logging
 import smtplib
+import time
 
 from src.entities.contact import ContactMessage
 from src.use_cases.ports import MailGateway
@@ -63,10 +64,54 @@ class SmtpMailGateway(MailGateway):
         )
         message.set_content(body)
 
-        self._logger.info("Sending SMTP email. request_id=%s to=%s", safe_request_id, self._default_recipient)
-        with smtplib.SMTP(self._host, self._port, timeout=self._timeout_seconds) as smtp:
-            if self._use_tls:
-                smtp.starttls()
-            if self._username:
-                smtp.login(self._username, self._password)
-            smtp.send_message(message)
+        phase = "connect"
+        started_at = time.perf_counter()
+        self._logger.info(
+            "smtp_send_start",
+            extra={
+                "event": "smtp_send_start",
+                "request_id": safe_request_id,
+                "smtp_host": self._host,
+                "smtp_port": self._port,
+                "smtp_to": self._default_recipient,
+                "smtp_tls_enabled": self._use_tls,
+                "smtp_auth_enabled": bool(self._username),
+            },
+        )
+
+        try:
+            with smtplib.SMTP(self._host, self._port, timeout=self._timeout_seconds) as smtp:
+                phase = "starttls"
+                if self._use_tls:
+                    smtp.starttls()
+
+                phase = "login"
+                if self._username:
+                    smtp.login(self._username, self._password)
+
+                phase = "send"
+                smtp.send_message(message)
+
+            elapsed_ms = round((time.perf_counter() - started_at) * 1000, 2)
+            self._logger.info(
+                "smtp_send_success",
+                extra={
+                    "event": "smtp_send_success",
+                    "request_id": safe_request_id,
+                    "smtp_to": self._default_recipient,
+                    "duration_ms": elapsed_ms,
+                },
+            )
+        except Exception:
+            elapsed_ms = round((time.perf_counter() - started_at) * 1000, 2)
+            self._logger.exception(
+                "smtp_send_failure",
+                extra={
+                    "event": "smtp_send_failure",
+                    "request_id": safe_request_id,
+                    "smtp_to": self._default_recipient,
+                    "phase": phase,
+                    "duration_ms": elapsed_ms,
+                },
+            )
+            raise
