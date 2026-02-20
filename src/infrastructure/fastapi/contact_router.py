@@ -20,6 +20,12 @@ def create_contact_router(
     mask_sensitive_ids: bool = True,
 ) -> APIRouter:
     router = APIRouter()
+    contact_responses = {
+        400: {"model": ErrorResponseModel},
+        422: {"model": ErrorResponseModel},
+        429: {"model": ErrorResponseModel},
+        500: {"model": ErrorResponseModel},
+    }
 
     def _safe_request_id(request_id: str) -> str:
         if not mask_sensitive_ids:
@@ -51,15 +57,17 @@ def create_contact_router(
         }
 
     @router.post(
+        "/api/contact",
+        status_code=202,
+        response_model=AcceptedResponseModel,
+        responses=contact_responses,
+    )
+    @router.post(
         "/contact",
         status_code=202,
         response_model=AcceptedResponseModel,
-        responses={
-            400: {"model": ErrorResponseModel},
-            422: {"model": ErrorResponseModel},
-            429: {"model": ErrorResponseModel},
-            500: {"model": ErrorResponseModel},
-        },
+        responses=contact_responses,
+        include_in_schema=False,
     )
     async def contact(
         payload: ContactRequestModel,
@@ -75,15 +83,17 @@ def create_contact_router(
         )
 
     @router.post(
+        "/api/mail",
+        status_code=202,
+        response_model=AcceptedResponseModel,
+        responses=contact_responses,
+    )
+    @router.post(
         "/mail",
         status_code=202,
         response_model=AcceptedResponseModel,
-        responses={
-            400: {"model": ErrorResponseModel},
-            422: {"model": ErrorResponseModel},
-            429: {"model": ErrorResponseModel},
-            500: {"model": ErrorResponseModel},
-        },
+        responses=contact_responses,
+        include_in_schema=False,
     )
     async def mail(
         payload: ContactRequestModel,

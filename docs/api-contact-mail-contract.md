@@ -1,4 +1,4 @@
-# Contrato API: `POST /contact` y `POST /mail`
+# Contrato API: `POST /api/contact` y `POST /api/mail`
 
 Fecha: 2026-02-18  
 Estado: Implementado
@@ -9,6 +9,11 @@ Definir el contrato final para migrar frontend Vue hacia endpoints de contacto/e
 
 ## Endpoints
 
+- `POST /api/contact`
+- `POST /api/mail`
+
+Compatibilidad legacy:
+
 - `POST /contact`
 - `POST /mail`
 
@@ -16,7 +21,7 @@ Ambos endpoints aceptan el mismo request para compatibilidad con frontend actual
 
 ## Estado actual de implementación
 
-- `POST /contact` y `POST /mail` están activos en FastAPI.
+- `POST /api/contact` y `POST /api/mail` están activos en FastAPI.
 - Éxito responde `202 Accepted` con `{ request_id, status, message }`.
 - Anti-spam activo: `honeypot` + `rate-limit`.
 - Error uniforme para ambos endpoints:
@@ -47,7 +52,7 @@ Ambos endpoints aceptan el mismo request para compatibilidad con frontend actual
 
 > Nota: `{HONEYPOT_FIELD}` se reemplaza por el valor de entorno `HONEYPOT_FIELD` (ejemplo: `website`).
 
-### Ejemplo request `POST /contact`
+### Ejemplo request `POST /api/contact`
 
 ```json
 {
@@ -68,7 +73,7 @@ Ambos endpoints aceptan el mismo request para compatibilidad con frontend actual
 }
 ```
 
-### Ejemplo request `POST /mail`
+### Ejemplo request `POST /api/mail`
 
 ```json
 {
@@ -97,7 +102,7 @@ Ambos endpoints aceptan el mismo request para compatibilidad con frontend actual
 - `status` (`accepted`)
 - `message` (string)
 
-#### Ejemplo éxito (`POST /contact`)
+#### Ejemplo éxito (`POST /api/contact`)
 
 ```json
 {
@@ -107,7 +112,7 @@ Ambos endpoints aceptan el mismo request para compatibilidad con frontend actual
 }
 ```
 
-#### Ejemplo éxito (`POST /mail`)
+#### Ejemplo éxito (`POST /api/mail`)
 
 ```json
 {
@@ -203,8 +208,8 @@ Responsabilidad: integración con servicios externos.
 ### Interface
 
 - Routers FastAPI:
-  - `POST /contact`
-  - `POST /mail`
+  - `POST /api/contact`
+  - `POST /api/mail`
 - DTOs/schemas para request/response.
 
 Responsabilidad: traducción HTTP <-> application.
@@ -256,10 +261,10 @@ Política actual de CORS methods para la API de contacto/email:
 
 ## Validación rápida (curl)
 
-### `POST /contact` (202)
+### `POST /api/contact` (202)
 
 ```bash
-curl -X POST http://127.0.0.1:8000/contact \
+curl -X POST http://127.0.0.1:8000/api/contact \
   -H "Content-Type: application/json" \
   -d '{
     "name":"Juan Pérez",
@@ -270,10 +275,10 @@ curl -X POST http://127.0.0.1:8000/contact \
   }'
 ```
 
-### `POST /mail` (202)
+### `POST /api/mail` (202)
 
 ```bash
-curl -X POST http://127.0.0.1:8000/mail \
+curl -X POST http://127.0.0.1:8000/api/mail \
   -H "Content-Type: application/json" \
   -d '{
     "name":"María Gómez",
@@ -287,7 +292,7 @@ curl -X POST http://127.0.0.1:8000/mail \
 ### Preflight CORS (`OPTIONS`)
 
 ```bash
-curl -i -X OPTIONS http://127.0.0.1:8000/contact \
+curl -i -X OPTIONS http://127.0.0.1:8000/api/contact \
   -H "Origin: https://datamaq.com.ar" \
   -H "Access-Control-Request-Method: POST"
 ```
@@ -296,7 +301,7 @@ curl -i -X OPTIONS http://127.0.0.1:8000/contact \
 
 ### Etapa 1 — Contrato y decisiones
 
-- Congelar contrato request/response para `/contact` y `/mail`.
+- Congelar contrato request/response para `/api/contact` y `/api/mail`.
 - Aprobar ADR y semántica `202`.
 - Alinear naming con frontend Vue para evitar breaking changes.
 

@@ -6,6 +6,11 @@ from fastapi.testclient import TestClient
 
 from src.shared.config import load_settings
 
+CONTACT_PATH = "/api/contact"
+MAIL_PATH = "/api/mail"
+LEGACY_CONTACT_PATH = "/contact"
+LEGACY_MAIL_PATH = "/mail"
+
 
 def _configure_env() -> None:
     os.environ["APP_ENV"] = "development"
@@ -65,7 +70,7 @@ def test_health_endpoints_return_ok() -> None:
 
 def test_contact_returns_202() -> None:
     with _client() as api_client:
-        response = api_client.post("/contact", json=_valid_payload())
+        response = api_client.post(CONTACT_PATH, json=_valid_payload())
 
     assert response.status_code == 202
     body = response.json()
@@ -79,7 +84,7 @@ def test_mail_returns_202() -> None:
     payload["email"] = "other@example.com"
 
     with _client() as api_client:
-        response = api_client.post("/mail", json=payload)
+        response = api_client.post(MAIL_PATH, json=payload)
 
     assert response.status_code == 202
     assert response.json()["status"] == "accepted"
@@ -90,7 +95,7 @@ def test_contact_returns_422_on_invalid_schema() -> None:
     payload["email"] = "invalid-email"
 
     with _client() as api_client:
-        response = api_client.post("/contact", json=payload)
+        response = api_client.post(CONTACT_PATH, json=payload)
 
     assert response.status_code == 422
     body = response.json()
@@ -103,7 +108,7 @@ def test_contact_returns_400_on_honeypot() -> None:
     payload["attribution"]["website"] = "I am a bot"
 
     with _client() as api_client:
-        response = api_client.post("/contact", json=payload)
+        response = api_client.post(CONTACT_PATH, json=payload)
 
     assert response.status_code == 400
     body = response.json()
@@ -112,8 +117,8 @@ def test_contact_returns_400_on_honeypot() -> None:
 
 def test_contact_returns_429_when_rate_limited() -> None:
     with _client() as api_client:
-        first = api_client.post("/contact", json=_valid_payload())
-        second = api_client.post("/contact", json=_valid_payload())
+        first = api_client.post(CONTACT_PATH, json=_valid_payload())
+        second = api_client.post(CONTACT_PATH, json=_valid_payload())
 
     assert first.status_code == 202
     assert second.status_code == 429
@@ -129,13 +134,22 @@ def test_contact_returns_500_on_unexpected_error() -> None:
             raise RuntimeError("boom")
 
         api_client.app.state.submit_contact_use_case.submit = _broken_submit
-        response = api_client.post("/contact", json=_valid_payload())
+        response = api_client.post(CONTACT_PATH, json=_valid_payload())
         api_client.app.state.submit_contact_use_case.submit = original_submit
 
     assert response.status_code == 500
     body = response.json()
     assert body["error"]["code"] == "INTERNAL_ERROR"
     assert body["request_id"]
+
+
+def test_legacy_paths_remain_compatible() -> None:
+    with _client() as api_client:
+        contact_response = api_client.post(LEGACY_CONTACT_PATH, json=_valid_payload())
+        mail_response = api_client.post(LEGACY_MAIL_PATH, json=_valid_payload())
+
+    assert contact_response.status_code == 202
+    assert mail_response.status_code == 202
 
 
 def test_cors_preflight_allows_required_origins() -> None:
@@ -149,7 +163,7 @@ def test_cors_preflight_allows_required_origins() -> None:
     with _client() as api_client:
         for origin in required_origins:
             response = api_client.options(
-                "/contact",
+                CONTACT_PATH,
                 headers={
                     "Origin": origin,
                     "Access-Control-Request-Method": "POST",

@@ -10,7 +10,7 @@ Guía operativa para que CODEX CLI ejecute cambios y validaciones end-to-end sob
 - Repositorio GitHub (renombrado)
 - VPS productivo
 - Deploy Docker Compose + Nginx
-- Validaciones de API (`/telegram/*`, `/tasks/start`, `/contact`, `/mail`)
+- Validaciones de API (`/telegram/*`, `/tasks/start`, `/api/contact`, `/api/mail`)
 
 ## Alcance y restricciones
 
@@ -65,7 +65,7 @@ Contexto:
 - Deploy: GitHub Actions -> VPS -> Docker Compose -> Nginx
 - Dominio: https://api.datamaq.com.ar
 - Endpoints legacy críticos: /telegram/webhook, /telegram/last_chat, /tasks/start
-- Endpoints nuevos: POST /contact, POST /mail
+- Endpoints nuevos: POST /api/contact, POST /api/mail
 
 Objetivo:
 Dejar entorno productivo sano, validar rutas nuevas/legacy y entregar evidencia.
@@ -89,15 +89,15 @@ Instrucciones:
 
 4) Smoke tests (prod)
    - GET https://api.datamaq.com.ar/telegram/last_chat -> 200
-   - OPTIONS https://api.datamaq.com.ar/contact con Origin=https://datamaq.com.ar y ACRM=POST -> 200
-   - POST https://api.datamaq.com.ar/contact payload válido -> 202
-   - POST https://api.datamaq.com.ar/mail payload válido -> 202
+   - OPTIONS https://api.datamaq.com.ar/api/contact con Origin=https://datamaq.com.ar y ACRM=POST -> 200
+   - POST https://api.datamaq.com.ar/api/contact payload válido -> 202
+   - POST https://api.datamaq.com.ar/api/mail payload válido -> 202
 
 5) Anti-spam
    - honeypot lleno -> 400
    - rate-limit (2 requests seguidos, según ventana/config) -> 429
 
-6) Si /contact o /mail devuelven 404
+6) Si /api/contact o /api/mail devuelven 404
    - diagnosticar Nginx upstream / despliegue de contenedor
    - validar nginx -t y recargar si aplica
    - reintentar smoke tests
@@ -139,7 +139,7 @@ curl -i https://api.datamaq.com.ar/telegram/last_chat
 ### CORS preflight
 
 ```bash
-curl -i -X OPTIONS https://api.datamaq.com.ar/contact \
+curl -i -X OPTIONS https://api.datamaq.com.ar/api/contact \
   -H "Origin: https://datamaq.com.ar" \
   -H "Access-Control-Request-Method: POST"
 ```
@@ -147,7 +147,7 @@ curl -i -X OPTIONS https://api.datamaq.com.ar/contact \
 ### Contact 202
 
 ```bash
-curl -i -X POST https://api.datamaq.com.ar/contact \
+curl -i -X POST https://api.datamaq.com.ar/api/contact \
   -H "Content-Type: application/json" \
   -d '{
     "name":"Juan Perez",
@@ -161,7 +161,7 @@ curl -i -X POST https://api.datamaq.com.ar/contact \
 ### Mail 202
 
 ```bash
-curl -i -X POST https://api.datamaq.com.ar/mail \
+curl -i -X POST https://api.datamaq.com.ar/api/mail \
   -H "Content-Type: application/json" \
   -d '{
     "name":"Maria Gomez",
@@ -175,7 +175,7 @@ curl -i -X POST https://api.datamaq.com.ar/mail \
 ### Honeypot 400
 
 ```bash
-curl -i -X POST https://api.datamaq.com.ar/contact \
+curl -i -X POST https://api.datamaq.com.ar/api/contact \
   -H "Content-Type: application/json" \
   -d '{
     "name":"Bot",
@@ -189,8 +189,8 @@ curl -i -X POST https://api.datamaq.com.ar/contact \
 ### Rate-limit 429 (si RATE_LIMIT_MAX=1 o bajo)
 
 ```bash
-curl -i -X POST https://api.datamaq.com.ar/contact -H "Content-Type: application/json" -d '{"name":"A","email":"a@a.com","message":"ok","meta":{},"attribution":{"website":""}}'
-curl -i -X POST https://api.datamaq.com.ar/contact -H "Content-Type: application/json" -d '{"name":"A","email":"a@a.com","message":"ok","meta":{},"attribution":{"website":""}}'
+curl -i -X POST https://api.datamaq.com.ar/api/contact -H "Content-Type: application/json" -d '{"name":"A","email":"a@a.com","message":"ok","meta":{},"attribution":{"website":""}}'
+curl -i -X POST https://api.datamaq.com.ar/api/contact -H "Content-Type: application/json" -d '{"name":"A","email":"a@a.com","message":"ok","meta":{},"attribution":{"website":""}}'
 ```
 
 ## Diagnóstico rápido de fallas comunes
@@ -210,7 +210,7 @@ curl -i -X POST https://api.datamaq.com.ar/contact -H "Content-Type: application
   - configurar llave SSH del usuario de VPS con acceso al repo.
   - validar en VPS: `git ls-remote --heads origin`.
 
-### 2) `404 /contact` o `404 /mail` en dominio real
+### 2) `404 /api/contact` o `404 /api/mail` en dominio real
 
 - Causa probable: versión vieja corriendo o deploy no aplicado.
 - Acción:
@@ -233,9 +233,9 @@ Checklist final esperado:
 - [ ] Workflow CI verde
 - [ ] Deploy verde
 - [ ] `GET /telegram/last_chat` -> `200`
-- [ ] `OPTIONS /contact` origin `https://datamaq.com.ar` -> `200`
-- [ ] `POST /contact` -> `202`
-- [ ] `POST /mail` -> `202`
+- [ ] `OPTIONS /api/contact` origin `https://datamaq.com.ar` -> `200`
+- [ ] `POST /api/contact` -> `202`
+- [ ] `POST /api/mail` -> `202`
 - [ ] Honeypot -> `400`
 - [ ] Rate-limit -> `429` (según configuración)
 

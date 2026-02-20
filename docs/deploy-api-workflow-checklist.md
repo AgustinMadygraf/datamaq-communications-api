@@ -124,14 +124,14 @@ Accion esperada:
 ### `verify_local`
 
 1. `http://127.0.0.1:8000/health` -> 200
-2. OPTIONS local `/contact` -> 200/204
-3. POST local `/contact` -> 202
+2. OPTIONS local `/api/contact` -> 200/204
+3. POST local `/api/contact` -> 202
 
 ### `verify_public`
 
 1. `https://api.datamaq.com.ar/health` -> 200
-2. OPTIONS publico `/contact` -> 200/204
-3. POST publico `/contact` -> 202
+2. OPTIONS publico `/api/contact` -> 200/204
+3. POST publico `/api/contact` -> 202
 
 ### `deploy_gate`
 
@@ -151,7 +151,7 @@ cd "$VPS_APP_DIR"
 docker compose ps
 docker compose logs --tail=200 api
 curl -i http://127.0.0.1:8000/health
-curl -i -X OPTIONS http://127.0.0.1:8000/contact -H "Origin: https://datamaq.com.ar" -H "Access-Control-Request-Method: POST"
+curl -i -X OPTIONS http://127.0.0.1:8000/api/contact -H "Origin: https://datamaq.com.ar" -H "Access-Control-Request-Method: POST"
 ```
 
 Validar entorno efectivo del contenedor:

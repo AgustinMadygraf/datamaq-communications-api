@@ -1,4 +1,4 @@
-# ADR-0001: Incorporar `POST /contact` y `POST /mail` con Arquitectura Limpia + SOLID
+# ADR-0001: Incorporar `POST /api/contact` y `POST /api/mail` con Arquitectura Limpia + SOLID
 
 - Fecha: 2026-02-18
 - Estado: Aprobada (propuesta)
@@ -8,7 +8,7 @@
 
 La auditoría del backend confirmó que:
 
-1. No existen endpoints `POST /contact` ni `POST /mail`.
+1. No existen endpoints `POST /api/contact` ni `POST /api/mail`.
 2. No hay implementación SMTP.
 3. El backend actual está orientado a Telegram/tasks y no debe romperse.
 
@@ -45,7 +45,7 @@ Contras:
 
 ## Decisiones técnicas
 
-1. **Semántica de respuesta:** elegir `202 Accepted` para `POST /contact` y `POST /mail`.
+1. **Semántica de respuesta:** elegir `202 Accepted` para `POST /api/contact` y `POST /api/mail`.
 2. **Anti-spam:** aplicar enfoque combinado (`rate-limit` + `honeypot`).
 3. **CORS:** política estricta por entorno:
    - Producción: dominios explícitos.
@@ -61,7 +61,8 @@ Adoptar Opción B (`202`) con anti-spam combinado y CORS estricto. Esta combinac
 - Se incorporan nuevas entidades/VOs en domain para contacto.
 - Se agregan casos de uso y puertos de aplicación para envío de correo.
 - Se implementa un adapter SMTP en infraestructura.
-- Se añaden routers FastAPI nuevos (`/contact`, `/mail`) aislados del flujo Telegram.
+- Se añaden routers FastAPI nuevos (`/api/contact`, `/api/mail`) aislados del flujo Telegram.
+- Se mantienen alias legacy (`/contact`, `/mail`) para compatibilidad hacia atrás.
 - Se introduce trazabilidad estandarizada por `request_id`.
 
 ## Variables de entorno requeridas

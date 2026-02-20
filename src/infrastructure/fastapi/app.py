@@ -44,7 +44,7 @@ _SERVICE_NAME = "datamaq-communications-api"
 configure_logging()
 logger = get_logger(_SERVICE_NAME)
 
-_CONTACT_PATHS = {"/contact", "/mail"}
+_CONTACT_PATHS = {"/api/contact", "/api/mail", "/contact", "/mail"}
 _HEALTH_PATHS = {"/", "/health"}
 
 

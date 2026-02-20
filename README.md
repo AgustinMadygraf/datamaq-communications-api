@@ -2,7 +2,7 @@
 
 MVP local con FastAPI + Telegram webhook expuesto por ngrok, todo iniciado desde `run.py`.
 
-Incluye endpoints de contacto/email (`POST /contact`, `POST /mail`) con respuesta `202`, `request_id`, anti-spam (`rate-limit` + `honeypot`) y CORS estricto por entorno.
+Incluye endpoints de contacto/email (`POST /api/contact`, `POST /api/mail`) con respuesta `202`, `request_id`, anti-spam (`rate-limit` + `honeypot`) y CORS estricto por entorno.
 
 ## Requisitos
 
@@ -21,7 +21,7 @@ Incluye endpoints de contacto/email (`POST /contact`, `POST /mail`) con respuest
   - `FORWARDED_ALLOW_IPS` (opcional; default `*`)
   - `CORS_ALLOWED_ORIGINS` (obligatorio; lista separada por comas)
   - `HTTP_LOG_HEALTHCHECKS` (opcional; default `false`; evita ruido de `/` y `/health`)
-  - `DEBUG_CONTACT_OBSERVABILITY` (opcional; default `false`; señales de payload sin PII en `/contact` y `/mail`)
+  - `DEBUG_CONTACT_OBSERVABILITY` (opcional; default `false`; señales de payload sin PII en `/api/contact` y `/api/mail`)
   - `DEBUG_TELEGRAM_WEBHOOK` (opcional; default `false`; trazas adicionales de `/telegram/webhook`)
   - `MASK_SENSITIVE_IDS` (opcional; default `true`; enmascara IDs/emails en logs)
   - `SMTP_HOST` (obligatorio)
@@ -63,11 +63,11 @@ Incluye endpoints de contacto/email (`POST /contact`, `POST /mail`) con respuest
 
 5. Prueba endpoint de contacto (respuesta esperada: `202`):
    - PowerShell:
-     - `Invoke-RestMethod -Method POST -Uri http://127.0.0.1:8000/contact -ContentType 'application/json' -Body '{"name":"Juan Pérez","email":"juan@empresa.com","message":"Necesito una demo","meta":{"source":"landing"},"attribution":{"website":""}}'`
+     - `Invoke-RestMethod -Method POST -Uri http://127.0.0.1:8000/api/contact -ContentType 'application/json' -Body '{"name":"Juan Pérez","email":"juan@empresa.com","message":"Necesito una demo","meta":{"source":"landing"},"attribution":{"website":""}}'`
 
 6. Prueba endpoint de mail (respuesta esperada: `202`):
    - PowerShell:
-     - `Invoke-RestMethod -Method POST -Uri http://127.0.0.1:8000/mail -ContentType 'application/json' -Body '{"name":"María Gómez","email":"maria@cliente.com","message":"Quiero recibir información","meta":{"source":"footer-form"},"attribution":{"website":""}}'`
+     - `Invoke-RestMethod -Method POST -Uri http://127.0.0.1:8000/api/mail -ContentType 'application/json' -Body '{"name":"María Gómez","email":"maria@cliente.com","message":"Quiero recibir información","meta":{"source":"footer-form"},"attribution":{"website":""}}'`
 
 7. (Opcional) Notificar automaticamente luego de usar Codex CLI:
    - `python scripts/run_codex_and_notify.py -- codex`
@@ -86,7 +86,7 @@ Incluye endpoints de contacto/email (`POST /contact`, `POST /mail`) con respuest
 
 ## Endpoints
 
-- `POST /contact`
+- `POST /api/contact`
   - Recibe payload compatible con frontend Vue (`name`, `email`, `message`, `meta`, `attribution`).
   - Responde `202 Accepted` con `{ request_id, status, message }`.
   - Aplica anti-spam con honeypot (`HONEYPOT_FIELD`) y rate-limit (`RATE_LIMIT_WINDOW`, `RATE_LIMIT_MAX`).
@@ -94,10 +94,13 @@ Incluye endpoints de contacto/email (`POST /contact`, `POST /mail`) con respuest
   - CORS expone métodos `POST` y `OPTIONS`.
   - Con `DEBUG_CONTACT_OBSERVABILITY=true` agrega señales de depuración no sensibles.
 
-- `POST /mail`
-  - Mismo contrato de request/response que `POST /contact`.
+- `POST /api/mail`
+  - Mismo contrato de request/response que `POST /api/contact`.
   - Flujo de envío por SMTP (`SMTP_*`) en background.
   - SMTP soporta modo con auth (`SMTP_USER` y `SMTP_PASS`) o sin auth (ambos vacíos).
+
+- Compatibilidad legacy:
+  - También se aceptan `POST /contact` y `POST /mail` para no romper integraciones existentes.
 
 - `POST /telegram/webhook`
   - Recibe updates de Telegram y guarda `last_chat_id`.
@@ -160,8 +163,8 @@ Objetivo de produccion:
 
 - API: `https://api.datamaq.com.ar`
 - Webhook Telegram: `https://api.datamaq.com.ar/telegram/webhook`
-- Contacto: `https://api.datamaq.com.ar/contact`
-- Mail: `https://api.datamaq.com.ar/mail`
+- Contacto: `https://api.datamaq.com.ar/api/contact`
+- Mail: `https://api.datamaq.com.ar/api/mail`
 
 Archivos incluidos para despliegue:
 
@@ -213,8 +216,8 @@ Luego de renombrar el repositorio en GitHub, validar:
   - Ejecutar workflow `Deploy API to VPS`.
 4. Smoke tests:
   - `curl -i https://api.datamaq.com.ar/health` -> `200`.
-  - `curl -i -X OPTIONS https://api.datamaq.com.ar/contact -H "Origin: https://datamaq.com.ar" -H "Access-Control-Request-Method: POST"` -> `200`.
-  - `POST /contact` y `POST /mail` -> `202`.
+  - `curl -i -X OPTIONS https://api.datamaq.com.ar/api/contact -H "Origin: https://datamaq.com.ar" -H "Access-Control-Request-Method: POST"` -> `200`.
+  - `POST /api/contact` y `POST /api/mail` -> `202`.
 
 Documentacion operativa relacionada:
 
