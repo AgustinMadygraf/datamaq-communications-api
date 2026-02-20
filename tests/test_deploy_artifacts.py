@@ -117,6 +117,8 @@ def test_workflow_verify_local_contains_healthcheck_and_smokes() -> None:
     assert 'echo "Healthcheck OK"' in run_script
     assert 'echo "Healthcheck failed"' in run_script
     assert "docker compose logs --tail=200 api" in run_script
+    assert "docker exec datamaq-communications-api printenv APP_ENV" in run_script
+    assert 'if [ "${app_env_value}" != "production" ]; then' in run_script
     assert "local_cors_status=$(curl -sS" in run_script
     assert "local_contact_status=$(curl -sS" in run_script
 
@@ -156,3 +158,18 @@ def test_workflow_deploy_uses_ssh_agent_with_secret() -> None:
     ssh_private_key = with_section.get("ssh-private-key", "")
     assert isinstance(ssh_private_key, str)
     assert "${{ secrets.VPS_SSH_KEY }}" in ssh_private_key
+
+
+def test_workflow_deploy_apply_enforces_app_env_production() -> None:
+    parsed = yaml.safe_load(WORKFLOW_FILE.read_text(encoding="utf-8"))
+    jobs = parsed.get("jobs", {})
+    deploy_apply = jobs.get("deploy_apply", {})
+    steps = deploy_apply.get("steps", [])
+    assert isinstance(steps, list)
+
+    apply_step = next((step for step in steps if step.get("name") == "Apply deployment on VPS"), None)
+    assert apply_step is not None, "Missing Apply deployment on VPS step"
+
+    run_script = apply_step.get("run", "")
+    assert 'upsert_env_var "APP_ENV" "production"' in run_script
+    assert "for key in SMTP_HOST SMTP_FROM SMTP_TO_DEFAULT APP_ENV; do" in run_script

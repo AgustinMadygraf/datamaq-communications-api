@@ -237,9 +237,10 @@ jobs:
           if [ -n "${SMTP_TO_DEFAULT}" ]; then
             upsert_env_var "SMTP_TO_DEFAULT" "${SMTP_TO_DEFAULT}"
           fi
+          upsert_env_var "APP_ENV" "production"
 
           missing=""
-          for key in SMTP_HOST SMTP_FROM SMTP_TO_DEFAULT; do
+          for key in SMTP_HOST SMTP_FROM SMTP_TO_DEFAULT APP_ENV; do
             if ! grep -q "^${key}=" .env; then
               missing="${missing} ${key}"
             elif [ -z "$(grep "^${key}=" .env | head -n1 | cut -d'=' -f2-)" ]; then
@@ -248,13 +249,13 @@ jobs:
           done
 
           if [ -n "${missing}" ]; then
-            echo "Missing required SMTP env vars in .env:${missing}"
+            echo "Missing required env vars in .env:${missing}"
             echo "Define SMTP_HOST, SMTP_FROM and SMTP_TO_DEFAULT in GitHub Secrets."
             exit 1
           fi
 
-          echo "SMTP env presence in .env:"
-          grep -E '^(SMTP_HOST|SMTP_FROM|SMTP_TO_DEFAULT)=' .env | sed 's/=.*/=<set>/'
+          echo "Required env presence in .env:"
+          grep -E '^(SMTP_HOST|SMTP_FROM|SMTP_TO_DEFAULT|APP_ENV)=' .env | sed 's/=.*/=<set>/'
 
           echo "Docker versions:"
           docker --version || true
@@ -307,6 +308,15 @@ jobs:
               exit 1
             fi
           done
+
+          echo "Validating APP_ENV inside container..."
+          app_env_value=$(docker exec datamaq-communications-api printenv APP_ENV || true)
+          echo "Container APP_ENV=${app_env_value}"
+          if [ "${app_env_value}" != "production" ]; then
+            echo "APP_ENV must be production in VPS runtime"
+            docker compose logs --tail=200 api
+            exit 1
+          fi
 
           echo "Running local CORS preflight check (/contact)..."
           local_cors_status=$(curl -sS -o /tmp/local_cors_body.txt -w "%{http_code}" -X OPTIONS \
