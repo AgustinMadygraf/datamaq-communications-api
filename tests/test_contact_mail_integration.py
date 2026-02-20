@@ -70,13 +70,16 @@ def test_health_endpoints_return_ok() -> None:
 
 def test_contact_returns_202() -> None:
     with _client() as api_client:
-        response = api_client.post(CONTACT_PATH, json=_valid_payload())
+        response = api_client.post(CONTACT_PATH, json=_valid_payload(), headers={"Origin": "https://datamaq.com.ar"})
 
     assert response.status_code == 202
     body = response.json()
+    assert body["ok"] is True
     assert body["status"] == "accepted"
+    assert body["channel"] == "contact"
     assert body["request_id"]
-    assert response.headers.get("x-request-id")
+    assert response.headers.get("x-request-id") == body["request_id"]
+    assert response.headers.get("access-control-expose-headers") == "X-Request-Id"
 
 
 def test_mail_returns_202() -> None:
@@ -84,10 +87,15 @@ def test_mail_returns_202() -> None:
     payload["email"] = "other@example.com"
 
     with _client() as api_client:
-        response = api_client.post(MAIL_PATH, json=payload)
+        response = api_client.post(MAIL_PATH, json=payload, headers={"Origin": "https://datamaq.com.ar"})
 
     assert response.status_code == 202
-    assert response.json()["status"] == "accepted"
+    body = response.json()
+    assert body["ok"] is True
+    assert body["status"] == "accepted"
+    assert body["channel"] == "mail"
+    assert response.headers.get("x-request-id") == body["request_id"]
+    assert response.headers.get("access-control-expose-headers") == "X-Request-Id"
 
 
 def test_contact_returns_422_on_invalid_schema() -> None:
@@ -99,8 +107,13 @@ def test_contact_returns_422_on_invalid_schema() -> None:
 
     assert response.status_code == 422
     body = response.json()
+    assert body["ok"] is False
+    assert body["error_code"] == "VALIDATION_ERROR"
+    assert body["detail"] == "Invalid request payload"
     assert body["error"]["code"] == "VALIDATION_ERROR"
+    assert body["error"]["message"] == "Invalid request payload"
     assert body["request_id"]
+    assert response.headers.get("x-request-id") == body["request_id"]
 
 
 def test_contact_returns_400_on_honeypot() -> None:
@@ -112,6 +125,9 @@ def test_contact_returns_400_on_honeypot() -> None:
 
     assert response.status_code == 400
     body = response.json()
+    assert body["ok"] is False
+    assert body["error_code"] == "BAD_REQUEST"
+    assert body["detail"]
     assert body["error"]["code"] == "BAD_REQUEST"
 
 
@@ -123,6 +139,9 @@ def test_contact_returns_429_when_rate_limited() -> None:
     assert first.status_code == 202
     assert second.status_code == 429
     body = second.json()
+    assert body["ok"] is False
+    assert body["error_code"] == "RATE_LIMIT_EXCEEDED"
+    assert body["detail"]
     assert body["error"]["code"] == "RATE_LIMIT_EXCEEDED"
 
 
@@ -139,6 +158,9 @@ def test_contact_returns_500_on_unexpected_error() -> None:
 
     assert response.status_code == 500
     body = response.json()
+    assert body["ok"] is False
+    assert body["error_code"] == "INTERNAL_ERROR"
+    assert body["detail"] == "Unexpected internal error"
     assert body["error"]["code"] == "INTERNAL_ERROR"
     assert body["request_id"]
 
@@ -181,3 +203,4 @@ def test_options_probe_without_preflight_headers_returns_204() -> None:
             assert response.status_code == 204
             assert response.headers.get("access-control-allow-origin") == "https://datamaq.com.ar"
             assert response.headers.get("access-control-allow-methods") == "POST, OPTIONS"
+            assert response.headers.get("access-control-expose-headers") == "X-Request-Id"

@@ -32,9 +32,11 @@ class ContactRequestModel(BaseModel):
 
 
 class AcceptedResponseModel(BaseModel):
+    ok: bool = True
     request_id: str
     status: str
     message: str
+    channel: str | None = None
 
 
 class ErrorBodyModel(BaseModel):
@@ -43,5 +45,8 @@ class ErrorBodyModel(BaseModel):
 
 
 class ErrorResponseModel(BaseModel):
+    ok: bool = False
     request_id: str
+    error_code: str
+    detail: str
     error: ErrorBodyModel

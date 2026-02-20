@@ -60,7 +60,10 @@ def _request_id_from_state(request: Request) -> str:
 def _error_response(request: Request, status_code: int, code: str, message: str) -> JSONResponse:
     request_id = _request_id_from_state(request)
     payload = {
+        "ok": False,
         "request_id": request_id,
+        "error_code": code,
+        "detail": message,
         "error": {
             "code": code,
             "message": message,
@@ -326,7 +329,8 @@ def create_app(custom_settings: Settings | None = None) -> FastAPI:
         allow_origins=list(effective_settings.cors_allowed_origins),
         allow_credentials=False,
         allow_methods=["POST", "OPTIONS"],
-        allow_headers=["*"],
+        allow_headers=["Content-Type", "Accept", "X-Request-Id"],
+        expose_headers=["X-Request-Id"],
     )
 
     fastapi_app.state.send_mail_use_case = dependencies["send_mail_use_case"]

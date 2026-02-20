@@ -51,6 +51,7 @@ def _options_response() -> Response:
         headers={
             "Access-Control-Allow-Methods": "POST, OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type, Accept, X-Request-Id",
+            "Access-Control-Expose-Headers": "X-Request-Id",
             "Vary": "Origin",
         },
     )
@@ -88,7 +89,7 @@ def create_contact_router(
         payload: ContactRequestModel,
         request: Request,
         background_tasks: BackgroundTasks,
-    ) -> dict[str, str]:
+    ) -> dict[str, object]:
         return _handle_contact_like_request(
             payload=payload,
             request=request,
@@ -119,7 +120,7 @@ def create_contact_router(
         payload: ContactRequestModel,
         request: Request,
         background_tasks: BackgroundTasks,
-    ) -> dict[str, str]:
+    ) -> dict[str, object]:
         return _handle_contact_like_request(
             payload=payload,
             request=request,
@@ -139,7 +140,7 @@ def create_contact_router(
         background_tasks: BackgroundTasks,
         endpoint_key: str,
         success_message: str,
-    ) -> dict[str, str]:
+    ) -> dict[str, object]:
         try:
             if debug_observability:
                 logger.debug(
@@ -184,9 +185,11 @@ def create_contact_router(
                 },
             )
             return {
+                "ok": True,
                 "request_id": result.request_id,
                 "status": result.status,
                 "message": result.message,
+                "channel": endpoint_key,
             }
         except HoneypotTriggeredError as exc:
             logger.warning(
